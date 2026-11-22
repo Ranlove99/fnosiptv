@@ -1,0 +1,17 @@
+[
+  {
+    "stepTitle": "安装确认",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "<p>这里写安装前说明，支持 HTML。讲清应用功能、前置条件与风险。</p>"
+      },
+      {
+        "type": "switch",
+        "field": "wizard_auto_enable",
+        "label": "安装后立即启动",
+        "initValue": "true"
+      }
+    ]
+  }
+]

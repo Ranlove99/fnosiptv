@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>飞牛IPTV · 直播源管理</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#141922; --panel2:#1b2230; --line:#242c3a;
+    --text:#e6edf7; --muted:#8b97ab; --accent:#3ea6ff; --ok:#2ecc71; --warn:#f5a623; --err:#ff5c5c;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  header{position:sticky;top:0;z-index:10;background:rgba(11,14,20,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);padding:14px 28px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600;letter-spacing:.3px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+  .dot.busy{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;min-width:0;max-width:100%}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px;
+    font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+  .pill b{color:var(--text);font-weight:600}
+  button{font:inherit;cursor:pointer;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);padding:8px 14px;transition:.15s}
+  button:hover{border-color:#31405a;background:#202a3a}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04121f;font-weight:600}
+  button.primary:hover{background:#5cb6ff}
+  button.ghost{background:transparent}
+  button.danger{color:var(--err);border-color:#3a2228}
+  button.danger:hover{background:#2a171b}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  nav{display:flex;gap:4px;padding:0 28px;border-bottom:1px solid var(--line);background:var(--bg)}
+  nav button{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;
+    padding:12px 16px;color:var(--muted);font-size:14px}
+  nav button.on{color:var(--text);border-bottom-color:var(--accent)}
+  main{padding:26px 28px 70px;max-width:1320px}
+  section{display:none}
+  section.on{display:block}
+  h2{font-size:15px;margin:0 0 14px;color:var(--muted);font-weight:600;letter-spacing:.5px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:26px}
+  .cards>*{min-width:0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .card .label{font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between}
+  .card .url{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;word-break:break-all;
+    color:#a8c7ff;line-height:1.5;min-height:36px;user-select:all;cursor:text;
+    background:#0e131c;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .card .hint{font-size:11.5px;color:#6b7789;margin-top:8px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  @media (max-width:560px){ #p-updated{display:none} .pill{padding:3px 9px} }
+  @media (max-width:760px){
+    main{padding:16px 14px 60px}
+    nav{padding:0 6px;overflow-x:auto;scrollbar-width:none}
+    nav::-webkit-scrollbar{display:none}
+    nav button{padding:11px 12px;font-size:13.5px;white-space:nowrap}
+    .cards{grid-template-columns:1fr}
+    .steps{padding:12px 14px;font-size:12.5px}
+    .field{grid-template-columns:1fr;gap:6px;align-items:start}
+    .field .k{font-size:12.5px}
+    th,td{padding:9px 10px;font-size:12.5px}
+    td.act button{padding:5px 8px;font-size:12px}
+    .card{padding:14px}
+    .chans{grid-template-columns:1fr}
+    header{padding:12px 14px;gap:10px}
+    .brand{font-size:16px}
+    .pills{gap:6px;margin-left:0;flex:1 1 100%;justify-content:flex-start}
+    .pill{font-size:11.5px;padding:3px 8px}
+    .tabs{padding:4px 14px 10px}
+  }
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+  td.act{white-space:nowrap}
+  td.act button{padding:6px 10px;font-size:12.5px}
+  th{color:var(--muted);font-weight:500;font-size:12px;background:var(--panel2)}
+  tr:last-child td{border-bottom:none}
+  tr.off td{opacity:.42}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;background:#1e2735;color:var(--muted)}
+  .tag.ok{background:rgba(46,204,113,.12);color:#6ee7a8}
+  .tag.err{background:rgba(255,92,92,.12);color:#ff9a9a}
+  .muted{color:var(--muted)}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .form{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:18px 0}
+  .form .grid{display:grid;grid-template-columns:180px 1fr 120px 110px;gap:10px;align-items:center}
+  input,select,textarea{font:inherit;background:#0e131c;border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:9px 11px;width:100%;outline:none}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  textarea{min-height:72px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}
+  .chip{padding:5px 12px;border-radius:999px;background:var(--panel);border:1px solid var(--line);
+    font-size:12.5px;color:var(--muted);cursor:pointer}
+  .chip.on{background:rgba(62,166,255,.14);border-color:rgba(62,166,255,.45);color:#9fd2ff}
+  .chans{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:9px}
+  .ch{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;
+    display:flex;align-items:center;gap:9px;min-width:0}
+  .ch img{width:26px;height:26px;object-fit:contain;border-radius:5px;background:#0e131c;flex:none}
+  .ch .ck{flex:none;width:15px;height:15px;accent-color:#3ea6ff;margin:0}
+  .ch.off{opacity:.45}
+  .ch .st{flex:none;font-size:10.5px;padding:0 5px;line-height:16px;border-radius:4px}
+  .ch .st.ok{background:#12331f;color:#5fd68a}
+  .ch .st.no{background:#3a1620;color:#f08098}
+  .ch .st.unk{background:#1f2734;color:#7d8fa8}
+  .ch .st.bad{background:#3d1a12;color:#ff9b6a}
+  .ch .st.warn{background:#3a2d10;color:#e8c05a}
+  .ch .st.blk{background:#2a2338;color:#bda6f0}
+  /* 批量管理条：只作用于服务端筛选结果，不走分页 */
+  .bulk{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;margin:0 0 12px;display:grid;gap:8px}
+  .bulk-hd{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+  .bulk-hd span:first-child{font-size:12.5px;color:#9fb0c6}
+  .bulk .row{gap:6px}
+  .bulk button{padding:5px 10px;font-size:12px}
+  .ch.chblk{background:#171b24}
+  /* 分组列表：一行一个组，右侧操作不触发进入 */
+  .grps{display:grid;gap:8px;margin-bottom:10px}
+  .grp{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;
+    display:flex;align-items:center;gap:10px;cursor:pointer}
+  .grp:hover{border-color:#31435c}
+  .grp.off{opacity:.5}
+  .grp .g-nm{font-size:14px;display:flex;align-items:center;gap:6px;min-width:0}
+  .grp .g-sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .grp .g-ops{display:flex;gap:6px;flex:none}
+  .hint-line{font-size:11.5px;color:#6b7789;line-height:1.6;margin-top:10px}
+  /* 通用操作弹层 */
+  .act-list{display:grid;gap:2px}
+  .act-list button{background:none;border:none;border-bottom:1px solid var(--line);
+    color:var(--text);text-align:left;padding:13px 16px;font-size:13.5px;cursor:pointer}
+  .act-list button:last-child{border-bottom:none}
+  .act-list button:hover{background:#1c2534}
+  .act-list button.danger{color:#f08098}
+  .ch .ph{width:26px;height:26px;border-radius:5px;background:#1f2a3a;color:#7f9ec4;flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;
+    border:1px solid #263346}
+  .ch .nm{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ch .sub{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .empty{padding:34px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--radius)}
+  .settings{display:grid;gap:12px;max-width:760px}
+  .field{display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+  .field .k{font-size:13px;color:var(--muted)}
+  .switch{width:44px;height:24px;border-radius:999px;background:#2a3444;position:relative;cursor:pointer;border:none;padding:0}
+  .switch i{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#8b97ab;transition:.18s}
+  .switch.on{background:rgba(62,166,255,.35)}
+  .switch.on i{left:23px;background:var(--accent)}
+  .toast{position:fixed;right:22px;bottom:22px;background:#1c2534;border:1px solid #2c3a50;
+    padding:12px 18px;border-radius:10px;font-size:13px;opacity:0;transform:translateY(8px);
+    transition:.2s;pointer-events:none;z-index:99}
+  .toast.on{opacity:1;transform:none}
+  /* 卡片右上角的「源 / 播放」 */
+  .ch .ops{display:flex;gap:5px;flex:none}
+  .mini{font-size:11.5px;line-height:1;padding:5px 8px;border-radius:6px;background:#22304a;
+    color:#9fd2ff;border:1px solid #2c3a50;cursor:pointer}
+  .mini:hover{background:#2a3b58}
+  .mini.pl{padding:5px 9px}
+  /* 弹层 */
+  .modal{position:fixed;inset:0;background:rgba(5,9,15,.74);display:none;
+    align-items:center;justify-content:center;z-index:120;padding:16px;backdrop-filter:blur(2px)}
+  .modal.on{display:flex}
+  .modal.stack{z-index:140}
+  .sheet{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    width:min(720px,100%);max-height:84vh;display:flex;flex-direction:column;overflow:hidden}
+  .sheet-hd{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .sheet-hd b{font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sheet-bd{overflow:auto;padding:4px 0}
+  .sheet-ft{display:flex;gap:8px;align-items:center;padding:11px 16px;border-top:1px solid var(--line)}
+  .sheet-ft button{white-space:nowrap;flex:none}
+  .xbtn{background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+  .src{display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.05);align-items:flex-start}
+  .src:last-child{border-bottom:none}
+  .src.main{background:rgba(62,166,255,.07)}
+  .src .flag{flex:none;font-size:10.5px;padding:2px 6px;border-radius:4px;line-height:15px;
+    background:#12331f;color:#5fd68a;margin-top:1px}
+  .src .flag.main{background:rgba(62,166,255,.18);color:#9fd2ff}
+  .src .flag.no{background:#3a1620;color:#f08098}
+  .src .flag.unk{background:#1f2734;color:#7d8fa8}
+  .src .body{flex:1;min-width:0}
+  .src .name{font-size:12.5px;color:#dbe3ef;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .src .u{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:#7f93b0;
+    word-break:break-all;margin-top:3px;line-height:1.45}
+  .src .acts{display:flex;gap:5px;flex:none;flex-direction:column}
+  .player{background:#000;width:min(940px,100%);border-radius:12px;overflow:hidden;
+    display:flex;flex-direction:column;border:1px solid #22304a}
+  .pl-hd{display:flex;align-items:center;gap:10px;padding:9px 13px;background:#101721}
+  .pl-hd b{font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pl-hd .u{font-size:11px;color:#7f93b0;font-family:ui-monospace,Menlo,Consolas,monospace;
+    max-width:44%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #video{width:100%;max-height:66vh;background:#000;display:block}
+  .pl-stage{position:relative;background:#000;display:flex;align-items:center;justify-content:center}
+  .pl-ov{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(4,7,12,.72);text-align:center;padding:18px}
+  .pl-ov.on{display:flex}
+  .pl-ov-in{max-width:440px;font-size:13px;color:#cfd9e6;line-height:1.6}
+  .pl-ov-ops{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+  .pl-ft{padding:8px 13px;font-size:11.5px;color:var(--muted);background:#101721;
+    display:flex;flex-direction:column;gap:7px}
+  .pl-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pl-line:last-child{gap:6px}
+  #pl-stats{color:#7f93b0}
+  #pl-level select{background:#182231;color:#cfd9e6;border:1px solid #2a3a52;border-radius:6px;
+    font-size:11.5px;padding:3px 4px;max-width:150px}
+  .pl-ft button.mini{margin-left:0}
+  .pl-ft .live{color:#5fd68a}
+  @media (max-width:560px){
+    .modal{align-items:flex-end;padding:0}
+    .sheet{border-radius:14px 14px 0 0;max-height:88vh;width:100%}
+    .player{border-radius:0;width:100%;max-height:100vh}
+    #video{max-height:52vh}
+    .src .acts{flex-direction:row}
+  }
+  .steps{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 20px;margin-bottom:24px;font-size:13px;color:#c3cddd}
+  .steps b{color:var(--text)}
+  .steps ol{margin:8px 0 0;padding-left:20px}
+  .steps li{margin:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot" id="dot"></span>飞牛IPTV</div>
+  <div class="pills">
+    <div class="pill">频道 <b id="p-total">0</b></div>
+    <div class="pill">分组 <b id="p-groups">0</b></div>
+    <div class="pill">合并重复 <b id="p-dupe">0</b></div>
+    <div class="pill" id="p-updated">尚未刷新</div>
+    <button class="primary" id="btn-refresh" onclick="doRefresh()">重新抓取</button>
+  </div>
+</header>
+
+<nav>
+  <button class="on" data-tab="home">订阅接入</button>
+  <button data-tab="src">源管理</button>
+  <button data-tab="ch">频道</button>
+  <button data-tab="set">设置</button>
+</nav>
+
+<main>
+  <section class="on" id="tab-home">
+    <div class="steps">
+      <b>飞牛影视接入三步</b>
+      <ol>
+        <li>打开飞牛影视 → <b>设置</b> → <b>新增媒体库</b>，内容类型选 <b>电视直播</b></li>
+        <li>直播源类型选 <b>URL 导入</b>，粘贴下面的 M3U 地址（<b>必须保留 .m3u 后缀</b>）</li>
+        <li>保存后回到首页即可看到直播模块；电视端能播、网页端转圈属浏览器跨域限制，改用飞牛 TV 端</li>
+      </ol>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="label"><span>M3U 订阅 · 给飞牛影视</span><span class="tag ok">推荐</span></div>
+        <div class="url" id="u-m3u"></div>
+        <div class="row" style="margin-top:10px">
+          <button onclick="copyUrl('u-m3u')">复制地址</button>
+          <a class="mono" id="l-m3u" href="#" target="_blank">打开预览</a>
+        </div>
+        <div class="hint">标准 M3U，频道名已统一（CCTV1 / CCTV-1 / CCTV1综合 → CCTV-1）</div>
+      </div>
+      <div class="card">
+        <div class="label"><span>TXT 订阅 · 给老播放器</span><span class="tag">备用</span></div>
+        <div class="url" id="u-txt"></div>
+        <div class="row" style="margin-top:10px">
+          <button onclick="copyUrl('u-txt')">复制地址</button>
+          <a class="mono" id="l-txt" href="#" target="_blank">打开预览</a>
+        </div>
+        <div class="hint">按 <span class="mono">分组,#genre#</span> 分段，适合 DIYP / 百川影音</div>
+      </div>
+      <div class="card">
+        <div class="label"><span>EPG 节目单</span><span class="tag" id="tag-epg">未配置</span></div>
+        <div class="url" id="u-epg"></div>
+        <div class="row" style="margin-top:10px">
+          <button onclick="copyUrl('u-epg')">复制地址</button>
+          <a class="mono" id="l-epg" href="#" target="_blank">打开预览</a>
+        </div>
+        <div class="hint">在「设置」里填入 XMLTV 地址后自动合并；M3U 头部会带上 x-tvg-url</div>
+      </div>
+    </div>
+
+    <h2>抓取结果 <span id="raw-hint" style="font-weight:400;font-size:12.5px"></span></h2>
+    <table id="report"></table>
+  </section>
+
+  <section id="tab-src">
+    <h2>已添加的源</h2>
+    <table id="src-table"></table>
+
+    <div class="form">
+      <h2 style="margin-bottom:12px">添加源</h2>
+      <div class="grid">
+        <input id="f-name" placeholder="名称，如「自建源」">
+        <input id="f-value" placeholder="M3U / TXT 订阅地址，或 http 直链">
+        <select id="f-kind">
+          <option value="url">订阅 URL</option>
+          <option value="text">粘贴内容</option>
+        </select>
+        <button class="primary" onclick="addSource()">添加并抓取</button>
+      </div>
+      <textarea id="f-text" placeholder="选择「粘贴内容」时把 M3U / TXT 全文贴在这里" style="margin-top:10px;display:none"></textarea>
+      <div class="hint" style="margin-top:8px;font-size:12px;color:#6b7789">
+        支持 M3U（#EXTM3U）与 TXT（<span class="mono">分组,#genre#</span>）两种格式；优先级数字越小越靠前，决定同名频道保留谁。
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-ch">
+    <!-- 第一层：分组列表 -->
+    <div id="grp-view">
+      <h2>频道 <span id="sel-hint" style="font-weight:400;font-size:12.5px"></span></h2>
+
+      <div class="row" style="margin-bottom:10px">
+        <button id="btn-probe" onclick="startProbe(this)">一键测活</button>
+        <button id="btn-correct" onclick="startCorrect(this)">源校正</button>
+        <button class="ghost" onclick="pruneDead(this)" id="btn-prune">剔除失效</button>
+        <button class="ghost" onclick="pruneAd(this)" id="btn-prune-ad">剔除广告</button>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <span class="muted" id="probe-hint" style="font-size:12.5px"></span>
+        <span class="muted" id="correct-hint" style="font-size:12.5px"></span>
+      </div>
+
+      <div class="row" style="margin-bottom:10px">
+        <input id="grp-q" placeholder="搜索分组" style="max-width:170px" oninput="drawGroups()">
+        <button class="ghost" onclick="showAllGroups(this)">显示全部组</button>
+        <button class="ghost" onclick="openBlocked()">已屏蔽 <b id="blk-n">0</b></button>
+      </div>
+
+      <div class="grps" id="grp-list"><div class="empty">加载中…</div></div>
+      <div class="hint-line">点分组进入组内频道；组可以整组隐藏、排序、改名，直接决定它们在 M3U 里的顺序</div>
+    </div>
+
+    <!-- 第二层：组内频道 -->
+    <div id="ch-view" style="display:none">
+      <div class="row" style="margin-bottom:6px">
+        <button class="ghost" onclick="backToGroups()">← 分组</button>
+        <b id="chv-title" style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b>
+        <span class="muted" id="chv-count" style="font-size:12px"></span>
+      </div>
+
+      <div class="row" id="chv-ops" style="margin-bottom:10px">
+        <button class="mini" onclick="grpAct('rename')">重命名</button>
+        <button class="mini" onclick="grpAct('move',-1)">↑ 上移</button>
+        <button class="mini" onclick="grpAct('move',1)">↓ 下移</button>
+        <button class="mini" onclick="grpAct('top')">置顶</button>
+        <button class="mini" onclick="grpAct('only')">只保留此组</button>
+        <button class="mini" onclick="grpHide()">隐藏此组</button>
+      </div>
+
+      <div class="row" style="margin-bottom:10px">
+        <input id="ch-q" placeholder="搜索频道名" style="max-width:180px" oninput="onSearch()">
+        <span class="tabs" id="alive-tabs" style="padding:0;margin:0;overflow:visible">
+          <span class="chip on" data-a="" onclick="setAlive(this,'')">全部</span>
+          <span class="chip" data-a="1" onclick="setAlive(this,'1')">可用</span>
+          <span class="chip" data-a="0" onclick="setAlive(this,'0')">失效</span>
+          <span class="chip" data-a="doubt" onclick="setAlive(this,'doubt')">可疑</span>
+          <span class="chip" data-a="ad" onclick="setAlive(this,'ad')">广告</span>
+        </span>
+      </div>
+
+      <div class="bulk">
+        <div class="bulk-hd">
+          <span id="bulk-hint">—</span>
+          <span class="muted" style="font-size:11.5px">批量操作作用于当前筛选的全部结果，不受分页限制</span>
+        </div>
+        <div class="row">
+          <button class="ghost" onclick="bulkManage('only', this)">仅保留这批</button>
+          <button class="ghost" onclick="bulkManage('block', this)">屏蔽这批</button>
+          <button class="ghost" onclick="bulkManage('unblock', this)">启用这批</button>
+          <button class="ghost" onclick="resetBlocked(this)" id="btn-reset">恢复全部</button>
+        </div>
+      </div>
+
+      <div class="chans" id="chan-list"><div class="empty">加载中…</div></div>
+      <div class="row" id="more-wrap" style="justify-content:center;margin-top:14px"></div>
+    </div>
+  </section>
+
+  <section id="tab-set">
+    <h2>抓取与输出</h2>
+    <div class="settings">
+      <div class="field"><div class="k">统一频道显示名</div>
+        <div><button class="switch" id="sw-unify" onclick="toggleSw('unify_name')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">CCTV1 / CCTV-1 / CCTV1综合 归一成 CCTV-1</span></div></div>
+      <div class="field"><div class="k">同名去重</div>
+        <div><button class="switch" id="sw-dedupe" onclick="toggleSw('dedupe')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">同一频道多个源只保留一个，其余记为备源</span></div></div>
+      <div class="field"><div class="k">仅保留中文频道</div>
+        <div><button class="switch" id="sw-cn" onclick="toggleSw('cn_only')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">默认开启：公开源里海外台会淹没列表，关掉可看全部</span></div></div>
+      <div class="field"><div class="k">定时刷新（分钟）</div>
+        <div class="row"><input id="s-refresh" type="number" min="0" style="max-width:140px">
+          <span class="muted" style="font-size:12px">0 = 不自动刷新；建议 360</span></div></div>
+      <div class="field"><div class="k">抓取超时（秒）</div>
+        <div><input id="s-timeout" type="number" min="5" max="60" style="max-width:140px"></div></div>
+      <div class="field"><div class="k">EPG 地址</div>
+        <div><input id="s-epg" placeholder="多个用逗号分隔，如 http://epg.51zmt.top:8000/e.xml">
+          <div class="muted" style="font-size:12px;margin-top:6px">留空则不生成节目单，M3U 里也不带 x-tvg-url</div></div></div>
+      <div class="field"><div class="k">对外地址</div>
+        <div><input id="s-base" placeholder="留空自动取当前访问地址，如 http://192.168.1.10:18080">
+          <button class="ghost" style="margin-top:6px" onclick="fillBase()">填入当前访问地址</button>
+          <div class="muted" style="font-size:12px;margin-top:6px">填了之后订阅地址固定用它；反代或端口映射时用得上</div></div></div>
+      <div class="field"><div class="k">刷新时检测可用性</div>
+        <div><button class="switch" id="sw-probe" onclick="toggleSw('probe_on_refresh')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">对前 400 个频道发 HEAD 请求，慢但能剔除死链</span></div></div>
+      <div class="field"><div class="k">台标走本机代理</div>
+        <div><button class="switch" id="sw-logo" onclick="toggleSw('local_logo')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">M3U 里的台标指向本机 /logo，飞牛影视才能显示缩略图</span></div></div>
+      <div class="field"><div class="k">M3U 走本机代理</div>
+        <div><button class="switch" id="sw-m3uproxy" onclick="toggleSw('m3u_proxy')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">飞牛影视/播放器直连黑屏时打开：M3U 里的地址改成经本机转发（带 UA 与 Referer）</span></div></div>
+      <div class="field"><div class="k">只输出可用频道</div>
+        <div><button class="switch" id="sw-only" onclick="toggleSw('only_alive')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">测活后生效，未测过的频道仍会输出</span></div></div>
+      <div class="field"><div class="k">只输出可信源</div>
+        <div><button class="switch" id="sw-hidead" onclick="toggleSw('hide_ad')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">M3U 里不带「广告」频道（录播冒充直播、同一条流挂多个台名）</span></div></div>
+      <div class="field"><div class="k">隐藏离线频道</div>
+        <div><button class="switch" id="sw-hide" onclick="toggleSw('hide_dead')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">需同时开启「检测可用性」</span></div></div>
+      <div class="field"><div class="k">频道页隐藏已屏蔽</div>
+        <div><button class="switch" id="sw-hideblk" onclick="toggleSw('hide_blocked')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">关掉后已屏蔽频道仍出现在「全部」里（带「已屏蔽」标签），方便对比</span></div></div>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="primary" onclick="saveSettings()">保存设置</button>
+      <button onclick="saveSettings().then(doRefresh)">保存并重新抓取</button>
+    </div>
+
+    <h2 style="margin-top:28px">关于</h2>
+    <div class="settings">
+      <div class="field"><div class="k">当前版本</div>
+        <div><span class="mono" id="ab-ver">—</span>
+          <span class="muted" style="font-size:12px;margin-left:10px">升级后版本号会变，设置与屏蔽名单保留</span></div></div>
+      <div class="field"><div class="k">数据目录</div>
+        <div class="mono" style="font-size:12px;color:#9fb0c6;word-break:break-all" id="ab-dir">—</div></div>
+      <div class="field"><div class="k">订阅地址</div>
+        <div class="mono" style="font-size:12px;color:#9fb0c6;word-break:break-all" id="ab-m3u">—</div></div>
+      <div class="field"><div class="k">参考项目</div>
+        <div><a href="https://github.com/akiralereal/iptv" target="_blank" rel="noopener"
+          style="color:#3ea6ff;font-size:12.5px">github.com/akiralereal/iptv</a>
+          <div class="muted" style="font-size:12px;margin-top:6px">分组管理与排序思路参考该项目；本应用为飞牛原生 FPK，零外部依赖</div></div></div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="act-modal" onclick="if(event.target===this)closeAct()">
+  <div class="sheet" style="width:min(420px,100%)">
+    <div class="sheet-hd"><b id="act-title">操作</b><button class="xbtn" onclick="closeAct()">×</button></div>
+    <div class="sheet-bd"><div class="act-list" id="act-list"></div></div>
+  </div>
+</div>
+
+<!-- 源列表：主源 + 备源，可逐个试播、可设为主源 -->
+<div class="modal" id="src-modal" onclick="if(event.target===this)closeSrc()">
+  <div class="sheet">
+    <div class="sheet-hd">
+      <b id="src-title">频道</b>
+      <span class="muted" id="src-count" style="font-size:11.5px"></span>
+      <button class="xbtn" onclick="closeSrc()">×</button>
+    </div>
+    <div class="sheet-bd" id="src-list"></div>
+    <div class="sheet-ft">
+      <button id="src-probe-btn" onclick="probeSources(this)">检测全部源</button>
+      <span class="muted" id="src-hint" style="font-size:11.5px;line-height:1.5">
+        点「用这个」换主地址；换过的主源会记住，重新抓取后自动恢复</span>
+    </div>
+  </div>
+</div>
+
+<!-- 播放窗口：检查源里到底是什么画面 -->
+<div class="modal" id="play-modal" onclick="if(event.target===this)closePlay()">
+  <div class="player">
+    <div class="pl-hd">
+      <b id="pl-title">播放</b>
+      <span class="u" id="pl-url"></span>
+      <button class="xbtn" onclick="closePlay()">×</button>
+    </div>
+    <div class="pl-stage">
+      <video id="video" controls playsinline autoplay></video>
+      <div class="pl-ov" id="pl-ov"><div class="pl-ov-in">
+        <span id="pl-ov-text">正在连接…</span>
+        <div class="pl-ov-ops" id="pl-ov-ops"></div>
+      </div></div>
+    </div>
+    <div class="pl-ft">
+      <div class="pl-line">
+        <span id="pl-state">正在连接…</span>
+        <span id="pl-stats"></span>
+      </div>
+      <div class="pl-line">
+        <span id="pl-level"></span>
+        <button class="mini" onclick="openPlaySources()">换源</button>
+        <button class="mini" onclick="snapShot()">截图</button>
+        <button class="mini" onclick="toggleFull()">全屏</button>
+        <button class="mini" onclick="retryPlay()">重连</button>
+        <button class="mini" onclick="copyPlaying()">复制地址</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="hls.min.js"></script>
+<script>
+let S = {settings:{}, sources:[], preview:[], stats:{}, subscribe:{}};
+let pollTimer = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'ch' && !CH.loaded) { showView('groups'); loadGroups(); }
+});
+
+document.getElementById('f-kind').onchange = e => {
+  const isText = e.target.value === 'text';
+  $('f-text').style.display = isText ? 'block' : 'none';
+  $('f-value').style.display = isText ? 'none' : 'block';
+};
+
+function toast(msg, ms = 2200) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), ms);
+}
+
+const API_BASE = (location.pathname.match(/^\/app\/[^/]+/) || [''])[0];
+
+async function api(path, body) {
+  const opt = body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {};
+  const r = await fetch(API_BASE + path, opt);
+  return r.json();
+}
+
+async function load() { S = await api('/api/state'); render(); }
+
+function render() {
+  const st = S.stats || {};
+  // 统计卡片显示「实际输出」的频道数：勾选筛过之后就是筛选后的数量
+  $('p-total').textContent = (st.output != null ? st.output : st.total) || 0;
+  $('p-groups').textContent = st.groups || 0;
+  $('p-dupe').textContent = st.dupe_merged || 0;
+  $('p-updated').textContent = S.updated_at
+    ? '更新 ' + new Date(S.updated_at * 1000).toLocaleString('zh-CN',
+        {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false})
+    : '尚未刷新';
+  const busy = !!S.refreshing;
+  $('dot').className = 'dot' + (busy ? ' busy' : '');
+  $('btn-refresh').disabled = busy;
+  $('btn-refresh').textContent = busy ? (S.progress || '刷新中') : '重新抓取';
+
+  const sub = S.subscribe || {};
+  [['m3u','u-m3u'], ['txt','u-txt'], ['epg','u-epg']].forEach(([k, id]) => {
+    const url = absUrl(sub[k]);
+    $(id).textContent = url || '—';
+    const a = $('l-' + k);
+    // 预览走 HTML 页：浏览器无法播放 .m3u，直接打开只会黑屏
+    if (url) { a.href = absUrl(sub.preview || url); a.style.display = ''; } else { a.style.display = 'none'; }
+  });
+  const hasEpg = (S.settings.epg_urls || '').trim();
+  $('tag-epg').textContent = hasEpg ? '已配置' : '未配置';
+  $('tag-epg').className = 'tag ' + (hasEpg ? 'ok' : '');
+
+  renderReport(); renderSources(); renderSettings();
+  if (!CH.loaded) return;
+  if (CH.view === 'channels') drawChannelList();
+  else loadGroups();
+}
+
+// 后端理论上总会给绝对地址，这里再兜一层：飞牛影视只认完整 URL
+function absUrl(u) {
+  if (!u) return '';
+  const s = String(u).trim();
+  if (!s || s === '—') return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  const prefix = (location.pathname.match(/^\/app\/[^/]+/) || [''])[0];
+  const path = s.startsWith('/') ? s : '/' + s;
+  return location.origin + prefix + path;
+}
+
+function renderReport() {
+  const rows = S.report || [];
+  const raw = rows.reduce((a, r) => a + (r.count || 0), 0);
+  const out = (S.stats && S.stats.total) || 0;
+  $('raw-hint').textContent = rows.length
+    ? `　原始 ${raw} 条 → 去重与过滤后输出 ${out} 个频道` : '';
+  if (!rows.length) { $('report').innerHTML = '<tr><td class="muted">还没有抓取记录</td></tr>'; return; }
+  $('report').innerHTML = '<tr><th>源</th><th>格式</th><th>频道数</th><th>状态</th></tr>' +
+    rows.map(r => `<tr><td>${esc(r.name)}</td><td class="mono">${esc(r.format || '-')}</td>
+      <td>${r.count}</td>
+      <td>${r.error ? `<span class="tag err">${esc(r.error)}</span>` : '<span class="tag ok">正常</span>'}</td></tr>`).join('');
+}
+
+function statusTag(s) {
+  const v = s.last_status || '';
+  if (!v) return '<span class="tag">待抓取</span>';
+  if (v.startsWith('ok:')) {
+    const p = v.split(':');
+    return `<span class="tag ok">${p[1] || ''} · ${p[2] || 0} 个</span>`;
+  }
+  return `<span class="tag err">${esc(v.replace(/^err:/, '').slice(0, 40))}</span>`;
+}
+
+function renderSources() {
+  const rows = S.sources || [];
+  if (!rows.length) { $('src-table').innerHTML = '<tr><td class="empty">还没有源，先在下面添加一个</td></tr>'; return; }
+  $('src-table').innerHTML = '<tr><th style="width:38%">名称</th><th>类型</th><th>状态</th><th>优先级</th><th style="width:220px">操作</th></tr>' +
+    rows.map((s, i) => `<tr class="${s.enabled ? '' : 'off'}">
+      <td><div>${esc(s.name)}</div><div class="mono muted" style="font-size:11px;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(s.value).slice(0,110))}</div></td>
+      <td><span class="tag">${s.kind === 'url' ? '订阅' : s.kind === 'file' ? '本地' : '粘贴'}</span></td>
+      <td>${statusTag(s)}</td>
+      <td class="mono">${s.priority}</td>
+      <td class="act">
+        <button class="ghost" onclick="moveSrc(${i},-1)" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="ghost" onclick="moveSrc(${i},1)" ${i === rows.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="ghost" onclick="toggleSrc('${s.id}',${!s.enabled})">${s.enabled ? '停用' : '启用'}</button>
+        <button class="danger" onclick="delSrc('${s.id}', this)">删除</button>
+      </td></tr>`).join('');
+}
+
+function initialOf(name) {
+  const n = String(name || '?').trim();
+  const m = n.match(/^CCTV[-\s]?(\d{1,2}\+?)/i);
+  if (m) return m[1];
+  const cjk = n.match(/[\u4e00-\u9fa5]/);
+  if (cjk) return cjk[0];
+  return n.slice(0, 2).toUpperCase();
+}
+
+function reasonOf(c) {
+  const why = (c.verdict2_info || '') || ((c.score_why || []).join('、'));
+  const sc = (c.score != null) ? `（信任分 ${c.score}）` : '';
+  return (why ? why : '可信度低') + sc;
+}
+
+// 台标走本机代理；slug 按原名算，改名不影响已缓存的图
+function logoUrl(c) {
+  const hex = Array.from(new TextEncoder().encode(c.name || 'x'))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  return `/logo/${hex}.png`;
+}
+
+// ---------------- 频道页：分组视图 → 组内频道 ----------------
+// 649 个台平铺在手机里没法管：先进分组，再在组内挑台；分组本身能整组隐藏、排序、改名。
+const CH = {items: [], total: 0, all: 0, vis: 0, blkCount: 0, offset: 0, limit: 60,
+            group: '', gname: '', alive: '', ad: '', q: '', blk: '',
+            view: 'groups', groups: [], loading: false, seq: 0, out: null, loaded: false};
+
+function chQuery(reset) {
+  if (reset) CH.offset = 0;
+  const qs = new URLSearchParams({offset: CH.offset, limit: CH.limit});
+  if (CH.group) qs.set('group', CH.group);
+  if (CH.alive) qs.set('alive', CH.alive);
+  if (CH.ad) qs.set('ad', CH.ad);
+  if (CH.q) qs.set('q', CH.q);
+  if (CH.blk) qs.set('blk', CH.blk);
+  return qs.toString();
+}
+
+function showView(v) {
+  CH.view = v;
+  $('grp-view').style.display = v === 'groups' ? '' : 'none';
+  $('ch-view').style.display = v === 'channels' ? '' : 'none';
+}
+
+async function loadGroups() {
+  try {
+    const d = await api('/api/groups');
+    CH.groups = d.groups || [];
+    CH.all = d.all || 0;
+    CH.blkCount = d.blocked || 0;
+    CH.out = d.output != null ? d.output : null;
+    CH.loaded = true;
+    drawGroups();
+    drawBulk();
+  } catch (e) {
+    $('grp-list').innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+  }
+}
+
+function drawGroups() {
+  const kw = (($('grp-q') && $('grp-q').value) || '').trim().toLowerCase();
+  const rows = CH.groups.filter(g => !kw || g.name.toLowerCase().includes(kw) || g.key.toLowerCase().includes(kw));
+  if (!rows.length) {
+    $('grp-list').innerHTML = '<div class="empty">没有匹配的分组</div>';
+    return;
+  }
+  $('grp-list').innerHTML = rows.map(g => `
+    <div class="grp ${g.hidden ? 'off' : ''}" data-k="${esc(g.key)}" onclick="openGroup(this.dataset.k)">
+      <div style="flex:1;min-width:0">
+        <div class="g-nm">${esc(g.name)}${g.hidden ? '<span class="st blk">已隐藏</span>' : ''}</div>
+        <div class="g-sub">${g.count} 个 · 可用 ${g.alive}${g.ad ? ` · 广告 ${g.ad}` : ''}</div>
+      </div>
+      <div class="g-ops" onclick="event.stopPropagation()">
+        <button class="mini" data-k="${esc(g.key)}" data-h="${g.hidden ? 1 : 0}" onclick="grpToggle(this)">${g.hidden ? '恢复' : '隐藏'}</button>
+        <button class="mini" data-k="${esc(g.key)}" onclick="grpMenu(this.dataset.k)">⋯</button>
+      </div>
+    </div>`).join('');
+  $('blk-n').textContent = CH.blkCount || 0;
+}
+
+function openGroup(key) {
+  const g = CH.groups.find(x => x.key === key);
+  CH.group = key;
+  CH.gname = g ? g.name : key;
+  CH.blk = ''; CH.alive = ''; CH.ad = ''; CH.q = '';
+  if ($('ch-q')) $('ch-q').value = '';
+  document.querySelectorAll('#alive-tabs .chip').forEach(x => x.classList.toggle('on', x.dataset.a === ''));
+  $('chv-ops').style.display = '';
+  showView('channels');
+  loadChannels(true);
+}
+
+function openBlocked() {
+  CH.blk = '1'; CH.group = ''; CH.gname = ''; CH.alive = ''; CH.ad = ''; CH.q = '';
+  if ($('ch-q')) $('ch-q').value = '';
+  $('chv-ops').style.display = 'none';
+  showView('channels');
+  loadChannels(true);
+}
+
+function backToGroups() {
+  showView('groups');
+  loadChannels && (CH.items = []);
+  loadGroups();
+}
+
+async function loadChannels(reset) {
+  // 并发请求只认最后一次：连点筛选时先发的响应可能后到，会把新视图覆盖回旧视图
+  const seq = ++CH.seq;
+  CH.loading = true;
+  try {
+    const d = await api('/api/channels?' + chQuery(reset));
+    if (seq !== CH.seq) return;
+    CH.total = d.total; CH.all = d.all;
+    CH.vis = d.visible != null ? d.visible : d.all;
+    CH.blkCount = d.blocked || 0;
+    CH.out = d.output != null ? d.output : (d.all - (d.blocked || 0));
+    CH.items = reset ? d.channels : CH.items.concat(d.channels);
+    CH.offset = CH.items.length;
+    CH.loaded = true;
+    drawChannelList();
+  } catch (e) {
+    if (seq === CH.seq) $('chan-list').innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+  } finally {
+    if (seq === CH.seq) CH.loading = false;
+  }
+}
+
+function drawChannelList() {
+  const list = CH.items;
+  if (!list.length) {
+    $('chan-list').innerHTML = `<div class="empty">${CH.blk === '1' ? '还没有屏蔽任何频道' : '没有符合条件的频道'}</div>`;
+    $('more-wrap').innerHTML = '';
+    drawBulk();
+    return;
+  }
+  $('chan-list').innerHTML = list.map((c, idx) => {
+    const initial = initialOf(c.disp || c.name);
+    const off = c.blocked === true;
+    const on = off ? false : c.selected !== false;
+    const logo = `<img src="${logoUrl(c)}" loading="lazy"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="ph" style="display:none">${esc(initial)}</div>`;
+    const st = c.alive === true ? '<span class="st ok">可用</span>'
+             : c.alive === false ? '<span class="st no">失效</span>'
+             : '<span class="st unk">未测</span>';
+    const vd = (c.verdict === 'ad' || c.verdict2 === 'ad') ? 'ad'
+             : (c.verdict === 'doubt' || c.verdict2 === 'doubt') ? 'doubt' : '';
+    const vTag = vd === 'ad' ? `<span class="st bad" title="${esc(reasonOf(c))}">广告</span>`
+               : vd === 'doubt' ? `<span class="st warn" title="${esc(reasonOf(c))}">可疑</span>` : '';
+    const bTag = off ? `<span class="st blk" title="${esc(c.blocked_why || '已屏蔽')}">已屏蔽</span>` : '';
+    const alts = (c.alts && c.alts.length) ? ` · 备${c.alts.length}` : '';
+    const pin = c.picked ? '<span class="st" style="background:rgba(62,166,255,.16);color:#9fd2ff">手选</span>' : '';
+    const srcName = c.source ? ` · ${esc(c.source)}` : '';
+    return `<div class="ch ${on ? '' : 'off'} ${off ? 'chblk' : ''}"><input type="checkbox" class="ck" ${on ? 'checked' : ''}
+      title="${off ? '勾选后恢复，重新进入播放链接' : '取消勾选 = 屏蔽，不再进入播放链接'}"
+      onchange="toggleOne(this, ${JSON.stringify(c.name).replace(/"/g, '&quot;')})">${logo}
+      <div style="min-width:0;flex:1"><div class="nm">${esc(c.disp || c.name)}</div>
+      <div class="sub">${st}${vTag}${bTag}${pin}<span title="${esc(c.source || '')}">${esc(c.group_disp || c.group)}${srcName}${alts}</span></div></div>
+      <div class="ops">
+        <button class="mini" onclick="openSources(${idx})" title="查看全部源">源</button>
+        <button class="mini pl" onclick="playChannel(${idx})" title="试播主源">▶</button>
+        <button class="mini" onclick="chanMenu(${idx})" title="更多">⋯</button>
+      </div></div>`;
+  }).join('');
+
+  const more = CH.items.length < CH.total
+    ? `<button class="ghost" onclick="loadChannels(false)">加载更多（${CH.items.length} / ${CH.total}）</button>`
+    : `<span class="muted" style="font-size:12.5px">已显示全部 ${CH.total} 个</span>`;
+  $('more-wrap').innerHTML = more;
+
+  drawBulk();
+
+  // 页面重新打开时也把上次测活结果说清楚，别让人以为没测过
+  const st2 = S.stats || {};
+  if (!$('probe-hint').textContent && st2.probed_at) {
+    const t = new Date(st2.probed_at * 1000).toLocaleString('zh-CN', {hour12: false});
+    $('probe-hint').textContent = `上次测活 ${t}：可用 ${st2.alive || 0} · 失效 ${st2.dead || 0}`;
+  }
+}
+
+function drawBulk() {
+  const out = CH.out != null ? CH.out : ((S.stats && S.stats.output) || CH.all);
+  $('sel-hint').textContent = `　共 ${CH.all} 个 · 输出 ${out} 个` +
+    (CH.blkCount ? ` · 已屏蔽 ${CH.blkCount} 个` : '');
+  if (CH.view === 'groups') return;
+
+  $('chv-title').textContent = CH.blk === '1' ? '已屏蔽' : (CH.gname || CH.group || '全部');
+  $('chv-count').textContent = `${CH.total} 个`;
+  const parts = [CH.blk === '1' ? '已屏蔽' : (CH.gname || CH.group || '全部')];
+  if (CH.alive === '1') parts.push('可用');
+  else if (CH.alive === '0') parts.push('失效');
+  else if (CH.ad === 'ad') parts.push('广告');
+  else if (CH.ad === 'doubt') parts.push('可疑');
+  if (CH.q) parts.push(`“${CH.q}”`);
+  $('bulk-hint').textContent = `当前筛选：${parts.join(' · ')} · ${CH.total} 个频道`;
+}
+
+/* ---------------- 分组 / 频道操作弹层 ---------------- */
+function closeAct() { $('act-modal').classList.remove('on'); }
+
+function openAct(title, items) {
+  $('act-title').textContent = title;
+  $('act-list').innerHTML = items.map((it, i) =>
+    `<button class="${it.danger ? 'danger' : ''}" data-i="${i}">${it.label}</button>`).join('');
+  $('act-list').querySelectorAll('button').forEach(b => {
+    b.onclick = () => { closeAct(); items[+b.dataset.i].run(); };
+  });
+  $('act-modal').classList.add('on');
+}
+
+function grpMenu(key) {
+  const g = CH.groups.find(x => x.key === key);
+  const items = [
+    {label: '重命名分组', run: () => renameGroup(key)},
+    {label: '↑ 上移', run: () => grpMove(key, 'move', -1)},
+    {label: '↓ 下移', run: () => grpMove(key, 'move', 1)},
+    {label: '置顶', run: () => grpMove(key, 'top')},
+    {label: '置底', run: () => grpMove(key, 'bottom')},
+    {label: '只保留此分组（其余全部隐藏）', run: () => grpOnly(key)},
+    {label: g && g.hidden ? '恢复显示此分组' : '隐藏此分组', danger: !(g && g.hidden),
+     run: () => grpSetHidden(key, !(g && g.hidden))},
+  ];
+  openAct(g ? g.name : key, items);
+}
+
+async function grpToggle(btn) {
+  const key = btn.dataset.k, hidden = btn.dataset.h === '1';
+  await grpSetHidden(key, !hidden);
+}
+
+async function grpSetHidden(key, hidden) {
+  const r = await api('/api/group', {action: hidden ? 'hide' : 'show', group: key});
+  if (!r.ok) return toast('操作失败');
+  await loadGroups();
+  if (hidden) toast('已隐藏该分组');
+}
+
+async function grpOnly(key) {
+  const g = CH.groups.find(x => x.key === key);
+  if (!confirm(`只保留「${g ? g.name : key}」？\n其它分组会全部隐藏（可在分组列表里逐个恢复）。`)) return;
+  const r = await api('/api/group', {action: 'only', group: key});
+  if (!r.ok) return toast('操作失败');
+  await loadGroups();
+  toast(`现在只输出「${g ? g.name : key}」`);
+}
+
+async function grpMove(key, action, delta) {
+  const r = await api('/api/group', {action, group: key, delta: delta || 0});
+  if (!r.ok) return toast('操作失败');
+  await loadGroups();
+  toast('已调整分组顺序，M3U 顺序同步变化');
+}
+
+async function renameGroup(key) {
+  const g = CH.groups.find(x => x.key === key);
+  const cur = g ? g.name : key;
+  const name = prompt(`分组「${key}」的新名字（留空恢复原名）`, cur === key ? '' : cur);
+  if (name === null) return;
+  const r = await api('/api/group', {action: 'rename', group: key, name});
+  if (!r.ok) return toast('改名失败');
+  await loadGroups();
+  if (CH.group === key) CH.gname = name.trim() || key;
+  toast('已改名，M3U 里的 group-title 同步更新');
+}
+
+async function grpHide() {
+  if (!CH.group) return;
+  if (!confirm(`隐藏「${CH.gname || CH.group}」整组？\n组内 ${CH.total} 个频道将不再进入播放链接（可在分组列表里恢复）。`)) return;
+  const key = CH.group;
+  await api('/api/group', {action: 'hide', group: key});
+  backToGroups();
+  toast('已隐藏该分组');
+}
+
+function chanMenu(idx) {
+  const c = CH.items[idx];
+  if (!c) return;
+  const items = [
+    {label: '改名', run: () => renameChannel(c.name, c.disp || c.name)},
+    {label: '↑ 上移', run: () => moveChannel(c.name, {delta: -1})},
+    {label: '↓ 下移', run: () => moveChannel(c.name, {delta: 1})},
+    {label: '置顶（组内第一个）', run: () => moveChannel(c.name, {to: 'top'})},
+    {label: '置底（组内最后一个）', run: () => moveChannel(c.name, {to: 'bottom'})},
+    {label: '查看全部源', run: () => openSources(idx)},
+    {label: '试播', run: () => playChannel(idx)},
+    {label: c.blocked ? '恢复：重新进入播放链接' : '屏蔽：不再进入播放链接',
+     danger: !c.blocked,
+     run: async () => {
+       const r = await api('/api/manage', {op: c.blocked ? 'unblock' : 'block', names: [c.name]});
+       if (!r.ok) return toast('操作失败');
+       CH.blkCount = r.blocked; CH.out = r.output;
+       if (CH.blk === '1') loadChannels(true); else { c.blocked = !c.blocked; c.selected = !!c.blocked; drawChannelList(); }
+       load();
+     }},
+  ];
+  openAct(c.disp || c.name, items);
+}
+
+async function renameChannel(name, cur) {
+  const alias = prompt(`「${name}」在播放器里显示的名字（留空恢复原名）`, cur === name ? '' : cur);
+  if (alias === null) return;
+  const r = await api('/api/channel/rename', {name, alias});
+  if (!r.ok) return toast('改名失败');
+  loadChannels(true);
+  toast('已改名，M3U 里的显示名同步更新');
+}
+
+async function moveChannel(name, body) {
+  const r = await api('/api/channel/order', Object.assign({name}, body));
+  if (!r.ok) return toast('排序失败');
+  loadChannels(true);
+  toast('已调整顺序，M3U 顺序同步变化');
+}
+
+async function showAllGroups(btn) {
+  const r = await api('/api/group', {action: 'show_all'});
+  if (!r.ok) return toast('操作失败');
+  await loadGroups();
+  toast('所有分组已恢复显示');
+}
+
+function playChannel(idx) {
+  const c = CH.items[idx];
+  if (!c) return;
+  openPlay(c.name, c.disp || c.name, null);
+}
+
+function copyText(text) {
+  const done = () => toast('已复制');
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请手动选中'); }
+    ta.remove();
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(fallback);
+  } else fallback();
+}
+
+/* ---------------- 分组顶栏操作 ---------------- */
+function grpAct(action, delta) {
+  if (!CH.group) return toast('先进入一个分组');
+  if (action === 'rename') return renameGroup(CH.group);
+  if (action === 'only') return grpOnly(CH.group);
+  if (action === 'hide') return grpHide();
+  return grpMove(CH.group, action, delta || 0);
+}
+
+/* ---------------- 源面板：主源 + 备源 ---------------- */
+const SRC = {name: '', data: null, busy: false};
+
+function closeSrc() { $('src-modal').classList.remove('on', 'stack'); }
+
+async function openSources(idx) {
+  const c = CH.items[idx];
+  if (!c) return;
+  SRC.name = c.name;
+  SRC.data = null;
+  $('src-title').textContent = c.disp || c.name;
+  $('src-count').textContent = '';
+  $('src-list').innerHTML = '<div class="empty">加载中…</div>';
+  $('src-hint').textContent = '点「用这个」换主地址；换过的主源会记住，重新抓取后自动恢复';
+  $('src-modal').classList.remove('stack');
+  $('src-modal').classList.add('on');
+  await loadSources();
+}
+
+async function loadSources() {
+  try {
+    SRC.data = await api('/api/channel?name=' + encodeURIComponent(SRC.name));
+  } catch (e) {
+    $('src-list').innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+    return;
+  }
+  drawSources();
+}
+
+function drawSources() {
+  const d = SRC.data;
+  if (!d) return;
+  const list = d.sources || [];
+  $('src-count').textContent = `${list.length} 个地址`;
+  if (!list.length) {
+    $('src-list').innerHTML = '<div class="empty">这个频道没有地址</div>';
+    return;
+  }
+  $('src-list').innerHTML = list.map((s, i) => {
+    const flag = s.alive === true ? '<span class="flag">可用</span>'
+               : s.alive === false ? '<span class="flag no">失效</span>'
+               : '<span class="flag unk">未测</span>';
+    const mainTag = s.main ? '<span class="flag main">主用</span>' : flag;
+    const note = s.note ? `<span style="font-size:11px;color:#7f93b0">${esc(s.note)}</span>` : '';
+    return `<div class="src ${s.main ? 'main' : ''}">
+      ${mainTag}
+      <div class="body">
+        <div class="name">${esc(s.source || '未知来源')}
+          <span style="font-size:11px;color:#7f93b0">信任分 ${s.score != null ? s.score : '-'}</span>${note}</div>
+        <div class="u">${esc(s.url)}</div>
+      </div>
+      <div class="acts">
+        <button class="mini pl" onclick="playFromSrc(${i})">播放</button>
+        ${s.main ? '' : `<button class="mini" onclick="pickSource(this, ${i})">用这个</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function playFromSrc(i) {
+  const d = SRC.data;
+  if (!d || !d.sources[i]) return;
+  const url = d.sources[i].url;
+  const name = SRC.name, label = $('src-title').textContent;
+  closeSrc();
+  openPlay(name, label, url);
+}
+
+async function pickSource(btn, i) {
+  const d = SRC.data;
+  if (!d || !d.sources[i]) return;
+  btn.disabled = true;
+  btn.textContent = '切换中';
+  try {
+    const r = await api('/api/channel/pick', {name: SRC.name, url: d.sources[i].url});
+    if (!r.ok) return toast(r.message || '切换失败');
+    d.sources.forEach((s, k) => { s.main = (k === i); });
+    toast('已设为该频道的主源，重新抓取后也会保留');
+    drawSources();
+    refreshChView();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '用这个';
+  }
+}
+
+async function probeSources(btn) {
+  if (!SRC.name) return;
+  // 面板刚打开时 list 还没回来，直接 return 会像「点了没反应」
+  if (!SRC.data) await loadSources();
+  if (!SRC.data) return;
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = '检测中…';
+  try {
+    const r = await api('/api/channel/probe', {name: SRC.name});
+    if (!r.ok) return toast(r.message || '检测失败');
+    await loadSources();
+    const vals = Object.values(r.results || {});
+    const ok = vals.filter(v => v.alive).length;
+    toast(`检测完成：${ok}/${vals.length} 个地址可用`);
+    refreshChView();
+  } catch (e) {
+    toast('检测失败：' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
+
+/* ---------------- 播放窗口 ---------------- */
+// 大部分源不能直接丢给浏览器：CORS 被拦、要 Referer、跨省不通。
+// 统一走本机代理，播不出来按候选顺序自动换下一个源，不用人守着点。
+const PLAY = {name: '', label: '', list: [], i: 0, hls: null, mountedAt: 0,
+              timer: 0, mediaFixed: false, ended: false, url: ''};
+
+function b64u(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+const isDirect = u => /\.(mp4|m4v|flv|mkv)(\?|$)/i.test(u || '');
+
+function setPlState(t) { $('pl-state').textContent = t; }
+
+function drawOverlay(text, show, ops) {
+  const ov = $('pl-ov'), v = $('video');
+  $('pl-ov-text').innerHTML = text || '';
+  $('pl-ov-ops').innerHTML = ops || '';
+  ov.classList.toggle('on', !!show);
+  // 原生控件是浏览器单独画的一层，会压在提示文字上，出问题时先收起来
+  if (show) {
+    if (v.dataset.ctl === undefined) v.dataset.ctl = v.controls ? '1' : '0';
+    v.controls = false;
+  } else if (v.dataset.ctl !== undefined) {
+    v.controls = true;
+    delete v.dataset.ctl;
+  }
+}
+
+function destroyHls() {
+  if (PLAY.hls) {
+    try { PLAY.hls.destroy(); } catch (e) {}
+    PLAY.hls = null;
+  }
+}
+
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && 'wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch (e) { /* 不支持或被拒绝就算了，不影响播放 */ }
+}
+
+async function openPlay(name, label, startUrl) {
+  PLAY.name = name;
+  PLAY.label = label || name;
+  PLAY.list = [];
+  PLAY.i = 0;
+  PLAY.ended = false;
+  $('pl-title').textContent = PLAY.label;
+  $('pl-url').textContent = '';
+  $('pl-stats').textContent = '';
+  $('pl-level').innerHTML = '';
+  setPlState('正在获取地址…');
+  drawOverlay('正在连接…', true);
+  $('play-modal').classList.add('on');
+  clearInterval(PLAY.timer);
+  PLAY.timer = setInterval(tick, 1000);
+  keepAwake(true);
+  const saved = parseFloat(localStorage.getItem('pl-vol') || '');
+  if (!isNaN(saved)) $('video').volume = Math.min(1, Math.max(0, saved));
+
+  try {
+    const d = await api('/api/play?name=' + encodeURIComponent(name));
+    PLAY.list = (d.sources || []).filter(s => s.url);
+  } catch (e) {
+    return fail('取播放地址失败：' + (e.message || e));
+  }
+  if (!PLAY.list.length) return fail('这个频道没有可用的播放地址');
+  const k = startUrl ? PLAY.list.findIndex(s => s.url === startUrl) : -1;
+  startAt(k >= 0 ? k : 0);
+}
+
+function startAt(i) {
+  PLAY.i = i;
+  const src = PLAY.list[i];
+  if (!src) return fail('所有地址都试过了，仍然没有画面');
+  PLAY.mediaFixed = false;
+  PLAY.url = src.url;
+  $('pl-url').textContent = src.url;
+  $('pl-url').title = src.url;
+  setPlState(`第 ${i + 1}/${PLAY.list.length} 个源 · ${src.source || '未知来源'}` +
+             (src.alive === false ? '（标记失效）' : ''));
+  mount(src.url);
+}
+
+function mount(url) {
+  const v = $('video');
+  destroyHls();
+  try { v.pause(); } catch (e) {}
+  v.onerror = null;
+  v.onloadedmetadata = null;
+  v.removeAttribute('src');
+  v.load();
+  PLAY.mountedAt = Date.now();
+  // 计时器跟着媒体走：不管从哪条路径进来，超时换源的看门狗都在跑
+  clearInterval(PLAY.timer);
+  PLAY.timer = setInterval(tick, 1000);
+  drawOverlay('正在连接…', true);
+  $('pl-level').innerHTML = '';
+
+  if (isDirect(url)) {
+    v.src = url;
+    v.onerror = () => nextSource('这个直链打不开');
+    v.onloadedmetadata = () => { drawOverlay('', false); tryPlay(); };
+    return;
+  }
+
+  const proxied = API_BASE + '/api/stream?u=' + b64u(url);
+
+  if (window.Hls && Hls.isSupported()) {
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      // 直播源码率波动大：给足缓冲，但别大到追不上直播点
+      maxBufferLength: 24,
+      maxMaxBufferLength: 48,
+      backBufferLength: 24,
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: 10,
+      manifestLoadingTimeOut: 8000,
+      manifestLoadingMaxRetry: 1,
+      manifestLoadingRetryDelay: 500,
+      levelLoadingTimeOut: 8000,
+      fragLoadingTimeOut: 16000,
+      fragLoadingMaxRetry: 4,
+      fragLoadingRetryDelay: 400,
+      startLevel: -1,
+      capLevelToPlayerSize: true,
+    });
+    PLAY.hls = hls;
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { drawOverlay('', false); tryPlay(); drawLevels(); });
+    hls.on(Hls.Events.LEVEL_SWITCHED, () => drawLevels());
+    hls.on(Hls.Events.ERROR, (evt, data) => onHlsError(data));
+    hls.loadSource(proxied);
+    hls.attachMedia(v);
+  } else {
+    // iOS Safari 原生就能解 HLS；代理层已经把切片地址重写成同源地址
+    v.src = proxied;
+    v.onerror = () => nextSource('浏览器无法解析这个流');
+    v.onloadedmetadata = () => { drawOverlay('', false); tryPlay(); };
+  }
+}
+
+function onHlsError(data) {
+  if (!data || !data.fatal) return;
+  const H = window.Hls;
+  if (data.type === H.ErrorTypes.MEDIA_ERROR && !PLAY.mediaFixed) {
+    PLAY.mediaFixed = true;
+    setPlState('解码异常，正在恢复…');
+    try { PLAY.hls.recoverMediaError(); } catch (e) {}
+    return;
+  }
+  const map = {
+    manifestLoadError: '清单拉不到',
+    manifestLoadTimeOut: '清单超时',
+    levelLoadError: '子清单失败',
+    fragLoadError: '切片拉不到',
+    fragLoadTimeOut: '切片超时',
+  };
+  nextSource(map[data.details] || data.type);
+}
+
+function nextSource(reason) {
+  if (PLAY.ended) return;
+  if (PLAY.i + 1 < PLAY.list.length) {
+    setPlState(`这个源播不了（${reason}），换下一个…`);
+    const at = PLAY.i + 1;
+    setTimeout(() => { if (!PLAY.ended && PLAY.i === at - 1) startAt(at); }, 350);
+  } else {
+    fail(reason);
+  }
+}
+
+function fail(msg) {
+  PLAY.ended = true;
+  destroyHls();
+  clearInterval(PLAY.timer);
+  const tip = /超时|拉不到|超时/.test(msg)
+    ? '这类源多半是运营商内网或跨省不通，换一个源通常就好了'
+    : '可以先换一个源试试，仍然不行多半是这个源已经停了';
+  setPlState('播放失败：' + msg);
+  drawOverlay(`${esc('播放失败：' + msg)}<div style="margin-top:6px;font-size:12px;color:#8fa0b8">${tip}</div>`, true,
+    `<button class="mini" onclick="retryPlay()">重试</button>
+     <button class="mini" onclick="openPlaySources()">换个源</button>
+     <button class="mini" onclick="closePlay()">关闭</button>`);
+}
+
+function tryPlay() {
+  const v = $('video');
+  v.play().catch(() => {
+    // 浏览器不让带声音自动播：先静音出画面，别停在那里黑屏
+    v.muted = true;
+    v.play().then(() => setPlState('已静音播放，点播放器上的音量图标开声音')).catch(() => {});
+  });
+}
+
+function drawLevels() {
+  const h = PLAY.hls, box = $('pl-level');
+  if (!h || !h.levels || h.levels.length < 2) { box.innerHTML = ''; return; }
+  box.innerHTML = `<select onchange="setLevel(this.value)">
+    <option value="-1">自动清晰度</option>
+    ${h.levels.map((l, i) => `<option value="${i}"${i === h.currentLevel ? ' selected' : ''}>${
+      l.height ? l.height + 'p' : Math.round((l.bitrate || 0) / 1000) + 'k'}</option>`).join('')}
+  </select>`;
+}
+
+function setLevel(v) {
+  if (!PLAY.hls) return;
+  PLAY.hls.currentLevel = +v;
+}
+
+let lastBuf = 0;
+function tick() {
+  const v = $('video');
+  if (!PLAY.list.length || PLAY.ended) return;
+  const parts = [];
+  if (v.videoWidth) parts.push(v.videoWidth + '×' + v.videoHeight);
+  if (PLAY.hls) {
+    const lv = PLAY.hls.levels && PLAY.hls.levels[PLAY.hls.currentLevel];
+    if (lv && lv.bitrate) parts.push(Math.round(lv.bitrate / 1000) + ' kbps');
+  }
+  let buf = 0;
+  try {
+    const b = v.buffered;
+    for (let i = 0; i < b.length; i++) {
+      if (b.start(i) <= v.currentTime + 0.3 && v.currentTime <= b.end(i)) buf = b.end(i) - v.currentTime;
+    }
+  } catch (e) {}
+  lastBuf = buf;
+  parts.push('缓冲 ' + buf.toFixed(1) + 's');
+  try {
+    const q = v.getVideoPlaybackQuality && v.getVideoPlaybackQuality();
+    if (q && q.droppedVideoFrames > 0) parts.push('丢帧 ' + q.droppedVideoFrames);
+  } catch (e) {}
+  $('pl-stats').textContent = parts.join(' · ');
+
+  if (v.videoWidth && v.readyState >= 2) {
+    if ($('pl-ov').classList.contains('on')) drawOverlay('', false);
+    return;
+  }
+  // 连上但一直没画面：超过 9 秒直接换源，比干等有用
+  if (Date.now() - PLAY.mountedAt > 9000) nextSource('连接超时，没有画面');
+}
+
+function retryPlay() {
+  if (!PLAY.list.length) return openPlay(PLAY.name, PLAY.label, null);
+  PLAY.ended = false;
+  drawOverlay('正在重连…', true);
+  clearInterval(PLAY.timer);
+  PLAY.timer = setInterval(tick, 1000);
+  startAt(PLAY.i);
+  toast('正在重连当前源');
+}
+
+function closePlay() {
+  PLAY.ended = true;
+  destroyHls();
+  clearInterval(PLAY.timer);
+  const v = $('video');
+  try { v.pause(); } catch (e) {}
+  v.removeAttribute('src');
+  v.load();
+  $('play-modal').classList.remove('on');
+  $('pl-stats').textContent = '';
+  keepAwake(false);
+}
+
+function openPlaySources() {
+  // 播放窗口后面叠一层源面板：换源不用关掉播放器再回头找
+  const modal = $('src-modal');
+  SRC.name = PLAY.name;
+  SRC.data = null;
+  $('src-title').textContent = PLAY.label || PLAY.name;
+  $('src-count').textContent = '';
+  $('src-list').innerHTML = '<div class="empty">加载中…</div>';
+  $('src-hint').textContent = '点「播放」直接切到该地址，播不出来会自动往下试';
+  modal.classList.add('on', 'stack');
+  loadSources();
+}
+
+function copyPlaying() {
+  if (!PLAY.url) return toast('还没选到地址');
+  copyText(PLAY.url);
+}
+
+function snapShot() {
+  const v = $('video');
+  if (!v.videoWidth) return toast('还没有画面，等一秒再试');
+  try {
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    const a = document.createElement('a');
+    a.href = c.toDataURL('image/jpeg', 0.88);
+    a.download = `${(PLAY.label || 'snapshot').replace(/[\\/:*?"<>|]/g, '_')}_${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast('已保存截图，可用来确认这个源播的是什么内容');
+  } catch (e) {
+    toast('截图失败：' + (e.message || e));
+  }
+}
+
+function toggleFull() {
+  const box = $('play-modal').querySelector('.player');
+  const v = $('video');
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+    return;
+  }
+  if (box.requestFullscreen) box.requestFullscreen().catch(() => toast('全屏被浏览器拦了'));
+  else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+  else toast('当前浏览器不支持全屏');
+}
+
+$('video').addEventListener('volumechange', function () {
+  try { localStorage.setItem('pl-vol', String(this.volume)); } catch (e) {}
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if ($('src-modal').classList.contains('on')) return closeSrc();
+    if ($('play-modal').classList.contains('on')) return closePlay();
+    if ($('act-modal').classList.contains('on')) return closeAct();
+  }
+});
+
+async function toggleOne(el, name) {
+  const on = el.checked;
+  try {
+    const r = await api('/api/manage', {op: on ? 'unblock' : 'block', names: [name]});
+    if (!r.ok) { el.checked = !on; return toast(r.message || '保存失败'); }
+    const item = CH.items.find(c => c.name === name);
+    if (item) { item.selected = on; item.blocked = !on; }
+    S.stats = S.stats || {};
+    S.stats.output = r.output; S.stats.blocked = r.blocked;
+    CH.blkCount = r.blocked; CH.out = r.output;
+    // 在「已屏蔽」视图里恢复，这一行必须消失，否则会被当成没生效
+    if (CH.blk === '1') loadChannels(true); else drawChannelList();
+    toast(on ? `已恢复「${name}」` : `已屏蔽「${name}」，可在「已屏蔽」里找回`);
+  } catch (e) { el.checked = !on; toast('保存失败'); }
+}
+
+/* 批量操作走服务端筛选：对 649 个频道全量生效，而不是只处理已加载的 60 条 */
+// 屏蔽类操作会改变分组计数，两个视图都要跟着刷
+function refreshChView() {
+  loadGroups();
+  if (CH.view === 'channels') loadChannels(true);
+}
+
+async function bulkManage(op, btn) {
+  const n = CH.total;
+  if (!n) return toast('当前筛选没有频道');
+  const label = op === 'only' ? `仅保留这 ${n} 个（其余全部屏蔽）`
+              : op === 'block' ? `屏蔽这 ${n} 个`
+              : `启用这 ${n} 个`;
+  if (!confirm(`将对当前筛选结果执行：${label}。\n\n继续？`)) return;
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '处理中…';
+  try {
+    const r = await api('/api/manage', {
+      op: op === 'block' ? 'block_filter' : op === 'unblock' ? 'unblock_filter' : 'only',
+      filter: {group: CH.group, alive: CH.alive, ad: CH.ad, q: CH.q, blk: CH.blk},
+    });
+    if (!r.ok) return toast(r.message || '操作失败');
+    S.stats = S.stats || {};
+    S.stats.output = r.output; S.stats.blocked = r.blocked;
+    CH.blkCount = r.blocked; CH.out = r.output;
+    toast(`完成：输出 ${r.output} 个 · 已屏蔽 ${r.blocked} 个`);
+    refreshChView();
+    load();
+  } catch (e) {
+    toast('操作失败');
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+function setAlive(el, a) {
+  if (a === 'blk') { CH.blk = '1'; CH.alive = ''; CH.ad = ''; }
+  else if (a === 'ad' || a === 'doubt') { CH.ad = a; CH.alive = ''; CH.blk = ''; }
+  else { CH.alive = a; CH.ad = ''; CH.blk = ''; }
+  document.querySelectorAll('#alive-tabs .chip').forEach(x => x.classList.toggle('on', x === el));
+  loadChannels(true);
+}
+
+let searchTimer = null;
+function onSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { CH.q = $('ch-q').value.trim(); loadChannels(true); }, 350);
+}
+
+async function startProbe(btn) {
+  btn.disabled = true;
+  btn.textContent = '测活中…';
+  try {
+    await api('/api/probe', {});
+    pollProbe();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '一键测活';
+    toast('测活启动失败');
+  }
+}
+
+function pollProbe() {
+  const btn = $('btn-probe');
+  const timer = setInterval(async () => {
+    let p = {};
+    try { p = (await api('/api/probe/status')).probe || {}; } catch (e) { return; }
+    if (p.running) {
+      $('probe-hint').textContent = `探测中 ${p.done}/${p.total} · 可用 ${p.alive} · 失效 ${p.dead}`;
+      return;
+    }
+    clearInterval(timer);
+    btn.disabled = false; btn.textContent = '一键测活';
+    $('probe-hint').textContent = p.total
+      ? `测活完成：可用 ${p.alive} · 失效 ${p.dead}（共 ${p.total}）` : '';
+    if (CH.view === 'channels') loadChannels(true);
+    loadGroups();
+    load();
+  }, 1200);
+}
+
+async function startCorrect(btn) {
+  btn.disabled = true;
+  btn.textContent = '校正中…';
+  try {
+    await api('/api/correct', {});
+    pollCorrect();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '源校正';
+    toast('校正启动失败');
+  }
+}
+
+function pollCorrect() {
+  const btn = $('btn-correct');
+  const timer = setInterval(async () => {
+    let p = {};
+    try { p = (await api('/api/state')).correct || {}; } catch (e) { return; }
+    if (p.running) {
+      $('correct-hint').textContent = `校正中 ${p.done}/${p.total} · 广告 ${p.ad || 0} · 可疑 ${p.doubt || 0}`;
+      return;
+    }
+    clearInterval(timer);
+    btn.disabled = false; btn.textContent = '源校正';
+    $('correct-hint').textContent = p.total
+      ? `校正完成：广告 ${p.ad} · 可疑 ${p.doubt} · 正常 ${p.ok}` : '';
+    if (CH.view === 'channels') loadChannels(true);
+    loadGroups();
+    load();
+  }, 1500);
+}
+
+async function pruneAd(btn) {
+  btn.disabled = true;
+  try {
+    const r = await api('/api/correct/prune', {});
+    if (r.ok) { toast(`已屏蔽 ${r.removed} 个广告频道，可在「已屏蔽」里找回`); refreshChView(); load(); }
+    else toast(r.message || '没有可剔除的频道');
+  } finally { btn.disabled = false; }
+}
+
+async function pruneDead(btn) {
+  btn.disabled = true;
+  try {
+    const r = await api('/api/probe/prune', {});
+    if (r.ok) { toast(`已屏蔽 ${r.removed} 个失效频道，可在「已屏蔽」里找回`); refreshChView(); load(); }
+    else toast(r.message || '没有可剔除的频道');
+  } finally { btn.disabled = false; }
+}
+
+async function resetBlocked(btn) {
+  if (!confirm('清空屏蔽名单？所有频道都会重新进入播放链接。\n（不会改动测活结果与手选源）')) return;
+  btn.disabled = true;
+  try {
+    const r = await api('/api/manage', {op: 'unblock_all'});
+    if (r.ok) { toast(`已恢复全部，输出 ${r.output} 个频道`); refreshChView(); load(); }
+  } finally { btn.disabled = false; }
+}
+
+function fillBase() {
+  const prefix = (location.pathname.match(/^\/app\/[^/]+/) || [''])[0];
+  $('s-base').value = location.origin + prefix;
+  toast('已填入，记得点保存');
+}
+
+function renderSettings() {
+  const s = S.settings || {};
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy'};
+  Object.keys(map).forEach(k => { const el = $(map[k]); if (el) el.classList.toggle('on', !!s[k]); });
+  $('s-refresh').value = s.refresh_minutes != null ? s.refresh_minutes : 360;
+  $('s-timeout').value = s.timeout != null ? s.timeout : 30;
+  $('s-epg').value = s.epg_urls || '';
+  $('s-base').value = s.public_base || '';
+  $('ab-ver').textContent = S.version || '—';
+  $('ab-dir').textContent = S.data_dir || '—';
+  $('ab-m3u').textContent = absUrl((S.subscribe || {}).m3u) || '—';
+}
+
+async function toggleSw(key) {
+  S.settings[key] = !S.settings[key];
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy'};
+  $(map[key]).classList.toggle('on', S.settings[key]);
+  await api('/api/settings', {[key]: S.settings[key]});
+  toast((key === 'hide_blocked' || key === 'only_alive' || key === 'hide_ad')
+    ? '已保存，重新进入「频道」即可看到变化' : '已保存，重新抓取后生效');
+}
+
+async function saveSettings() {
+  const payload = {
+    refresh_minutes: Number($('s-refresh').value || 0),
+    timeout: Number($("s-timeout").value || 30),
+    epg_urls: $('s-epg').value.trim(),
+    public_base: $('s-base').value.trim(),
+  };
+  await api('/api/settings', payload);
+  toast('设置已保存');
+  await load();
+}
+
+async function doRefresh() {
+  await api('/api/refresh', {});
+  toast('已开始抓取，稍候…');
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const st = await api('/api/state');
+    S = st; render();
+    if (!st.refreshing) {
+      clearInterval(pollTimer);
+      toast('抓取完成：' + (st.stats.total || 0) + ' 个频道');
+    }
+  }, 1500);
+}
+
+async function addSource() {
+  const kind = $('f-kind').value;
+  const value = kind === 'text' ? $('f-text').value.trim() : $('f-value').value.trim();
+  if (!value) return toast('请填写订阅地址或内容');
+  const name = $('f-name').value.trim() || (kind === 'text' ? '粘贴源' : '新源');
+  const r = await api('/api/source', {action:'add', kind, value, name});
+  if (!r.ok) return toast(r.message || '添加失败');
+  $('f-name').value = ''; $('f-value').value = ''; $('f-text').value = '';
+  toast('已添加，正在抓取');
+  setTimeout(load, 1200); setTimeout(load, 5000);
+}
+
+async function delSrc(id, btn) {
+  const name = btn.closest('tr').querySelector('div').textContent;
+  if (!confirm('删除源「' + name + '」？频道会在下次抓取后移除')) return;
+  await api('/api/source', {action:'delete', id});
+  toast('已删除'); setTimeout(load, 800);
+}
+
+async function toggleSrc(id, enabled) {
+  await api('/api/source', {action:'toggle', id, enabled});
+  setTimeout(load, 900);
+}
+
+async function moveSrc(i, delta) {
+  await api('/api/source', {action:'move', id:S.sources[i].id, delta});
+  setTimeout(load, 600);
+}
+
+function copyUrl(id) {
+  const text = absUrl($(id).textContent);
+  if (!text || text === '—') return toast('还没有地址');
+  const done = () => toast('已复制');
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(fallback);
+  } else fallback();
+  function fallback() {
+    const ta = document.createElement('textarea'); ta.value = text;
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请手动选中'); }
+    ta.remove();
+  }
+}
+
+load();
+
+// 支持 /admin?tab=src 直达某个页签（也方便手机端收藏）
+(function () {
+  const tab = new URLSearchParams(location.search).get('tab') || location.hash.replace('#', '');
+  if (tab) {
+    const btn = document.querySelector('nav button[data-tab="' + tab + '"]');
+    if (btn) btn.click();
+  }
+})();
+
+setInterval(async () => {
+  if (S.refreshing) return;
+  const st = await api('/api/state');
+  if (st.updated_at !== S.updated_at) { S = st; render(); }
+}, 20000);
+</script>
+</body>
+</html>

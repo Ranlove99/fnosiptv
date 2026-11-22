@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+
+# 测试与临时文件
+.pytest_cache/
+.mypy_cache/
+*.log
+*.tmp
+.tmp/
+
+# 运行期数据：安装后落在飞牛的 var / etc，不随源码进仓库
+data/
+cache.json
+config.json
+pack/app/data/
+pack/app/cache.json
+pack/app/config.json
+
+# 打包中间产物（app.tgz 由 build.sh 临时生成）
+*.tgz
+
+# 编辑器与操作系统
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
