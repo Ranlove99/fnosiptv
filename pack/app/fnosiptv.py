@@ -32,7 +32,7 @@ APP_NAME = "fnosiptv"
 PREFIX = "/app/%s" % APP_NAME
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, "ui")
-APP_VERSION = "1.8.1"
+APP_VERSION = "1.9.0"
 
 DATA_DIR = os.environ.get("TRIM_PKGVAR") or os.path.join(HERE, "..", "data")
 DATA_DIR = os.path.abspath(DATA_DIR)
@@ -97,8 +97,11 @@ DEFAULT_SETTINGS = {
     "hide_ad": False,
     "auto_correct": True,
     "local_logo": True,
-    # M3U 里输出本机代理地址：飞牛影视/电视盒子拉不到带 Referer 校验的源时用它
-    "m3u_proxy": False,
+    # M3U 里的 m3u8 频道统一走本机 /api/live：实时重取清单 + 源过期自动换源，
+    # 专门治飞牛影视「能打开、播一段就停」（清单/切片签名过期、时移窗口播完）
+    "m3u_proxy": True,
+    # /api/live 代理时是否多源自动切换；关掉则只代理用户选中的主源
+    "auto_renew": True,
     # 分组维度：可以整组隐藏/排序/改名，不必逐个台去勾
     "hidden_groups": [],
     "group_order": [],
@@ -725,16 +728,22 @@ def d64(token):
     return base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode("utf-8")
 
 
-def stream_rel(url):
-    """子清单地址。写相对路径不带 /，页面在 /app/x/admin 时也能正确落到 /app/x/stream。"""
-    return "stream?u=" + e64(url)
+def stream_rel(url, src=""):
+    """子清单地址。带 src 时把「当前用的是哪个源」一并传下去，切片失败才好定位换源。"""
+    rel = "stream?u=" + e64(url)
+    if src:
+        rel += "&s=" + e64(src)
+    return rel
 
 
-def seg_rel(url):
-    return "seg?u=" + e64(url)
+def seg_rel(url, src=""):
+    rel = "seg?u=" + e64(url)
+    if src:
+        rel += "&s=" + e64(src)
+    return rel
 
 
-def rewrite_playlist(text, base):
+def rewrite_playlist(text, base, src=""):
     """把 m3u8 里的子清单、分片、密钥地址换成经过本机代理的地址。"""
     out = []
     after_stream_inf = False
@@ -747,13 +756,13 @@ def rewrite_playlist(text, base):
         if s.startswith("#"):
             if _URI_ATTR.search(s):
                 s = _URI_ATTR.sub(
-                    lambda m: 'URI="%s"' % seg_rel(urllib.parse.urljoin(base, m.group(1))), s)
+                    lambda m: 'URI="%s"' % seg_rel(urllib.parse.urljoin(base, m.group(1)), src), s)
             out.append(s)
             after_stream_inf = s.startswith("#EXT-X-STREAM-INF")
             continue
         full = urllib.parse.urljoin(base, s)
         is_sub = after_stream_inf or full.split("?")[0].lower().endswith(".m3u8")
-        out.append(stream_rel(full) if is_sub else seg_rel(full))
+        out.append(stream_rel(full, src) if is_sub else seg_rel(full, src))
         after_stream_inf = False
     return "\n".join(out) + "\n"
 
@@ -798,6 +807,71 @@ def apply_picked(channels, picked):
         if want and reorder_sources(ch, want):
             ch["picked"] = True
     return channels
+
+
+# ---------------------------------------------------------------- 续期 / 失效换源
+# 「能打开、播一段就停」的根子：清单或切片带时效签名，播一会儿就 403/404；
+# 或者拿到的是时移流，切片窗口播完就没了。
+# 这里给每个源记一个冷却期：切片失败即判该源过期，下次取清单时自动跳过、换下一个源。
+
+SRC_COOL = {}                    # 源地址 -> 冷却截止时间戳
+COOL_LOCK = threading.Lock()
+COOL_SECONDS = 90                # 过期源冷却多久不再优先尝试
+
+
+def mark_cool(url, secs=COOL_SECONDS):
+    if not url:
+        return
+    with COOL_LOCK:
+        SRC_COOL[url] = time.time() + secs
+
+
+def is_cool(url):
+    with COOL_LOCK:
+        until = SRC_COOL.get(url)
+        if not until:
+            return False
+        if until > time.time():
+            return True
+        SRC_COOL.pop(url, None)
+        return False
+
+
+def cool_state():
+    """给状态页看：还有多少秒解冻。"""
+    now = time.time()
+    with COOL_LOCK:
+        return {u: int(until - now) for u, until in SRC_COOL.items() if until > now}
+
+
+def find_channel_by_url(cache, url):
+    """用主源或任一备源地址反查频道，播放入口只带地址即可。"""
+    if not url:
+        return None
+    for ch in cache.get("channels", []):
+        if ch.get("url") == url or url in (ch.get("alts") or []):
+            return ch
+    return None
+
+
+def channel_sources(ch, prefer=None):
+    """主源 + 备源去重；prefer 提到最前；冷却中的源排到最后（不删，全部过期时仍能兜底）。"""
+    pairs = [(ch.get("url", ""), ch.get("source", ""))]
+    alts = ch.get("alts") or []
+    srcs = ch.get("alt_sources") or []
+    for i, u in enumerate(alts):
+        pairs.append((u, srcs[i] if i < len(srcs) else ""))
+    urls, seen = [], set()
+    for u, _ in pairs:
+        if u and u not in seen:
+            seen.add(u)
+            urls.append(u)
+    if prefer and prefer in urls:
+        urls.remove(prefer)
+        urls.insert(0, prefer)
+    if len(urls) > 1:
+        urls.sort(key=lambda u: 1 if is_cool(u) else 0)   # 稳定排序：正常源在前
+    return urls
 
 
 # ---------------------------------------------------------------- HTTP
@@ -889,7 +963,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # 播放时每秒好几个分片请求，全打进日志会把有用信息淹掉
         p = self.path or ""
-        if "/api/seg" in p or "/api/stream" in p:
+        if "/api/seg" in p or "/api/stream" in p or "/api/live" in p:
             return
         addr = self.client_address[0] if isinstance(self.client_address, tuple) else "-"
         print("[web] %s %s" % (addr, fmt % args), flush=True)
@@ -933,6 +1007,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_play(query)
         if path in ("/api/stream", "/api/seg"):
             return self.proxy_stream(path, query)
+        if path == "/api/live":
+            return self.api_live(query)
         if path == "/api/probe/status":
             with LOCK:
                 return self.send_json({"probe": dict(STATE["probe"])})
@@ -1032,6 +1108,7 @@ class Handler(BaseHTTPRequestHandler):
                              if (c.get("verdict") == "doubt" or c.get("verdict2") == "doubt")
                              and not (c.get("verdict") == "ad" or c.get("verdict2") == "ad"))
         stats["corrected_at"] = cache.get("corrected_at", 0)
+        stats["cool"] = len(cool_state())   # 因切片过期被暂时跳过的源数量
         return self.send_json({
             "app": "fnosiptv",
             "version": APP_VERSION,
@@ -1398,8 +1475,16 @@ class Handler(BaseHTTPRequestHandler):
         if not url.lower().startswith(("http://", "https://")):
             return self.send_body("只支持 http(s) 地址", "text/plain; charset=utf-8", 400)
 
+        src = ""
+        stoken = (query.get("s") or [""])[0]
+        if stoken:
+            try:
+                src = d64(stoken)
+            except Exception:  # noqa: BLE001
+                src = ""
+
         if path == "/api/stream":
-            return self.send_playlist(url)
+            return self.send_playlist(url, src)
 
         # 分片：透传 Range，边读边写，不占内存
         extra = {"Accept-Encoding": "identity"}
@@ -1413,10 +1498,14 @@ class Handler(BaseHTTPRequestHandler):
                 resp = open_stream(url, timeout=20, extra=extra)
                 break
             except urllib.error.HTTPError as exc:
-                # 4xx/5xx 直接交回播放器：它看到 404 会重试或换源，比我们吞掉有用
-                code = 404 if exc.code in (404, 410) else 502
+                # 403/404/410 多半是该源切片签名过期或时移窗口播完：标记该源冷却，
+                # 并回 404 让播放器尽快重载清单 —— 重载时就会换到活源，画面接着走。
+                if exc.code in (403, 404, 410):
+                    mark_cool(src)
+                    return self.send_body("分片不可用，稍后自动换源",
+                                          "text/plain; charset=utf-8", 404)
                 return self.send_body("分片返回 %d" % exc.code,
-                                      "text/plain; charset=utf-8", code)
+                                      "text/plain; charset=utf-8", 502)
             except Exception as exc:  # noqa: BLE001
                 last = exc
                 if attempt == 0:
@@ -1462,14 +1551,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001
                 pass
 
-    def send_playlist(self, url):
-        """拉取并重写 m3u8。"""
+    def send_playlist(self, url, src=""):
+        """拉取并重写 m3u8。src 标明这份清单来自哪个源，传给切片以便失败时换源。"""
+        src = src or url
         try:
             resp = open_stream(url, timeout=8)
             raw = resp.read(4 * 1024 * 1024)
             final = resp.geturl() or url      # 跟随 302 后的真实地址
             resp.close()
         except urllib.error.HTTPError as exc:
+            if exc.code in (403, 404, 410):
+                mark_cool(src)
             return self.send_body("播放列表返回 %d" % exc.code,
                                   "text/plain; charset=utf-8", 502)
         except Exception as exc:  # noqa: BLE001
@@ -1480,7 +1572,77 @@ class Handler(BaseHTTPRequestHandler):
             # 不是 HLS：多半是直接给了 mp4/flv，交给播放器原生能力
             return self.send_body("这个地址返回的不是 HLS 播放列表，可能已失效",
                                   "text/plain; charset=utf-8", 415)
-        body = rewrite_playlist(text, final)
+        body = rewrite_playlist(text, final, src)
+        return self.send_body(body, "application/vnd.apple.mpegurl",
+                              extra={"Access-Control-Allow-Origin": "*",
+                                     "Cache-Control": "no-cache"})
+
+    def api_live(self, query):
+        """频道稳定入口：/api/live?u=<base64(主源)>，M3U 里每个 m3u8 频道都指向这里。
+
+        每次请求都实时重取清单；主源过期（签名失效 / 时移窗口播完）就自动换下一个备源，
+        再把子清单与切片重写成带源标记的本机地址。切片一旦 403/404，标记该源冷却，
+        下次取清单直接跳过 —— 播放器重载清单时就已经换到活源，画面接着走。
+        """
+        token = (query.get("u") or [""])[0]
+        if not token:
+            return self.send_body("缺少 u 参数", "text/plain; charset=utf-8", 400)
+        try:
+            url = d64(token)
+        except Exception:  # noqa: BLE001
+            return self.send_body("地址解码失败", "text/plain; charset=utf-8", 400)
+        if not url.lower().startswith(("http://", "https://")):
+            return self.send_body("只支持 http(s) 地址", "text/plain; charset=utf-8", 400)
+
+        conf = load_config()
+        ch = find_channel_by_url(load_cache(), url)
+        if ch and conf["settings"].get("auto_renew", True):
+            cands = channel_sources(ch, prefer=url)
+        else:
+            cands = [url]
+
+        def grab(u):
+            resp = open_stream(u, timeout=7)
+            raw = resp.read(4 * 1024 * 1024)
+            final = resp.geturl() or u
+            resp.close()
+            text = core.decode(raw)
+            return (text, final) if text.lstrip().startswith("#EXTM3U") else (None, final)
+
+        text = final = None
+        used = ""
+        last = "无可用地址"
+        # 第一轮：跳过冷却中的源
+        for u in cands:
+            if len(cands) > 1 and is_cool(u):
+                continue
+            try:
+                text, final = grab(u)
+                if text:
+                    used = u
+                    break
+                last = "不是 HLS 清单"
+            except urllib.error.HTTPError as exc:
+                last = "HTTP %d" % exc.code
+                if exc.code in (403, 404, 410):
+                    mark_cool(u)
+            except Exception as exc:  # noqa: BLE001
+                last = str(exc)[:120]
+        # 第二轮：全部冷却/失败时兜底，宁可试一遍也不让频道黑屏
+        if text is None:
+            for u in cands:
+                try:
+                    text, final = grab(u)
+                    if text:
+                        used = u
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+        if text is None:
+            return self.send_body("所有源暂时不可用：%s" % last,
+                                  "text/plain; charset=utf-8", 502)
+
+        body = rewrite_playlist(text, final, used)
         return self.send_body(body, "application/vnd.apple.mpegurl",
                               extra={"Access-Control-Allow-Origin": "*",
                                      "Cache-Control": "no-cache"})
@@ -1760,14 +1922,14 @@ class Handler(BaseHTTPRequestHandler):
         epg_conf = (load_config()["settings"].get("epg_urls") or "").strip()
         epg = base + "/epg.xml" if epg_conf else ""
         if conf["settings"].get("m3u_proxy"):
-            # 直连地址只有本机播得动时（源站校验 Referer/UA），让播放器也走本机代理。
-            # 已经是 m3u8 的才代理，mp4/flv 这类直链代理没意义还会拖慢。
+            # 走 /api/live：实时重取清单 + 源过期自动换源，治「播一段就停」。
+            # 已是 m3u8 的才接管；mp4/flv 直链代理没意义还会拖慢。
             proxied = []
             for c in channels:
                 u = c.get("url") or ""
                 if u.lower().split("?")[0].endswith(".m3u8"):
                     d = dict(c)
-                    d["url"] = "%s/api/stream?u=%s" % (base, e64(u))
+                    d["url"] = "%s/api/live?u=%s" % (base, e64(u))
                     proxied.append(d)
                 else:
                     proxied.append(c)
