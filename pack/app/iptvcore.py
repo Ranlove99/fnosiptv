@@ -660,16 +660,32 @@ def apply_keep(channels, keep):
     return [c for c in channels if c.get("name") in wanted]
 
 
-def to_m3u(channels, epg_url="", public_base="", logos=True):
-    """logos=True 时台标走本机 /logo 代理：飞牛影视多数场景拉不到 imgur 这类外链，
-    本地代理会缓存到磁盘，保证有图。"""
+def pick_logo_url(ch, public_base="", logos=True, mode="local"):
+    """台标地址。
+
+    飞牛影视只认**外网** tvg-logo，内网地址（http://192.168.x.x/...）一律不显示
+    （官方论坛已确认）。所以 mode=cdn 时优先给公网 HTTPS 图床；网页端仍可用本机代理。
+    """
+    raw = (ch.get("logo") or "").strip()
+    if mode == "cdn":
+        if raw.lower().startswith("https://") and not any(h in raw.lower() for h in SKIP_LOGO_HOSTS):
+            return raw
+        key = logo_key(ch.get("name", ""))
+        if key:
+            return LOGO_MIRRORS[0] % urllib.parse.quote(key)
+        return ""
+    if logos and public_base:
+        return "%s/logo/%s.png" % (public_base, logo_slug(ch.get("name", "")))
+    if raw and public_base and raw.startswith("/"):
+        return public_base + raw
+    return raw
+
+
+def to_m3u(channels, epg_url="", public_base="", logos=True, logo_mode="local"):
+    """logos=True 时台标走本机 /logo 代理；logo_mode="cdn" 时改用公网台标库（飞牛影视需要）。"""
     lines = ['#EXTM3U x-tvg-url="%s"' % epg_url if epg_url else "#EXTM3U"]
     for ch in channels:
-        logo = ch.get("logo", "")
-        if logos and public_base:
-            logo = "%s/logo/%s.png" % (public_base, logo_slug(ch.get("name", "")))
-        elif logo and public_base and logo.startswith("/"):
-            logo = public_base + logo
+        logo = pick_logo_url(ch, public_base, logos, logo_mode)
         lines.append(
             '#EXTINF:-1 tvg-id="%s" tvg-name="%s" tvg-logo="%s" group-title="%s",%s'
             % (esc(ch.get("tvg_id", "")), esc(ch.get("name", "")), esc(logo),

@@ -32,7 +32,7 @@ APP_NAME = "fnosiptv"
 PREFIX = "/app/%s" % APP_NAME
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, "ui")
-APP_VERSION = "1.9.1"
+APP_VERSION = "1.9.2"
 
 DATA_DIR = os.environ.get("TRIM_PKGVAR") or os.path.join(HERE, "..", "data")
 DATA_DIR = os.path.abspath(DATA_DIR)
@@ -97,6 +97,8 @@ DEFAULT_SETTINGS = {
     "hide_ad": False,
     "auto_correct": True,
     "local_logo": True,
+    # 台标用公网 CDN：飞牛影视只认外网 tvg-logo，内网 /logo 地址一律不显示
+    "logo_cdn": True,
     # M3U 里的 m3u8 频道统一走本机 /api/live：实时重取清单 + 源过期自动换源，
     # 专门治飞牛影视「能打开、播一段就停」（清单/切片签名过期、时移窗口播完）
     "m3u_proxy": True,
@@ -1952,8 +1954,10 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     proxied.append(c)
             channels = proxied
+        logo_mode = "cdn" if conf["settings"].get("logo_cdn", True) else "local"
         body = core.to_m3u(channels, epg_url=epg, public_base=base,
-                           logos=bool(conf["settings"].get("local_logo", True)))
+                           logos=bool(conf["settings"].get("local_logo", True)),
+                           logo_mode=logo_mode)
         return self.send_body(body, "audio/x-mpegurl; charset=utf-8")
 
     def serve_preview(self):

@@ -403,9 +403,12 @@
       <div class="field"><div class="k">刷新时检测可用性</div>
         <div><button class="switch" id="sw-probe" onclick="toggleSw('probe_on_refresh')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">对前 400 个频道发 HEAD 请求，慢但能剔除死链</span></div></div>
-      <div class="field"><div class="k">台标走本机代理</div>
+      <div class="field"><div class="k">台标用公网 CDN</div>
+        <div><button class="switch" id="sw-logocdn" onclick="toggleSw('logo_cdn')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">飞牛影视只认外网台标地址，内网 /logo 一律显示不出来。开启后用公网台标库，手机在任何网络都有图。建议开启</span></div></div>
+      <div class="field"><div class="k">网页端台标走本机</div>
         <div><button class="switch" id="sw-logo" onclick="toggleSw('local_logo')"><i></i></button>
-          <span class="muted" style="font-size:12px;margin-left:10px">M3U 里的台标指向本机 /logo，飞牛影视才能显示缩略图</span></div></div>
+          <span class="muted" style="font-size:12px;margin-left:10px">管理页与网页预览用本机 /logo（更快、离线也有图），不影响给飞牛影视的 M3U</span></div></div>
       <div class="field"><div class="k">自动续期代理（防中途停）</div>
         <div><button class="switch" id="sw-m3uproxy" onclick="toggleSw('m3u_proxy')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">M3U 里的 m3u8 频道改走本机 /api/live：每次实时重取清单、切片签名过期自动换源，专治飞牛影视「能打开、播一段就停」。建议开启</span></div></div>
@@ -1591,7 +1594,7 @@ function fillBase() {
 
 function renderSettings() {
   const s = S.settings || {};
-  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', logo_cdn:'sw-logocdn', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
   Object.keys(map).forEach(k => { const el = $(map[k]); if (el) el.classList.toggle('on', !!s[k]); });
   $('s-refresh').value = s.refresh_minutes != null ? s.refresh_minutes : 360;
   $('s-timeout').value = s.timeout != null ? s.timeout : 30;
@@ -1604,7 +1607,7 @@ function renderSettings() {
 
 async function toggleSw(key) {
   S.settings[key] = !S.settings[key];
-  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', logo_cdn:'sw-logocdn', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
   $(map[key]).classList.toggle('on', S.settings[key]);
   await api('/api/settings', {[key]: S.settings[key]});
   toast((key === 'hide_blocked' || key === 'only_alive' || key === 'hide_ad')
