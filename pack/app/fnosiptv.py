@@ -32,7 +32,7 @@ APP_NAME = "fnosiptv"
 PREFIX = "/app/%s" % APP_NAME
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, "ui")
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.9.1"
 
 DATA_DIR = os.environ.get("TRIM_PKGVAR") or os.path.join(HERE, "..", "data")
 DATA_DIR = os.path.abspath(DATA_DIR)
@@ -102,6 +102,9 @@ DEFAULT_SETTINGS = {
     "m3u_proxy": True,
     # /api/live 代理时是否多源自动切换；关掉则只代理用户选中的主源
     "auto_renew": True,
+    # 切片直连：清单仍经 NAS 代理（负责续期/换源），视频分片让播放器直接连源站，
+    # NAS 流量从 GB 级降到 KB 级。源站校验 Referer/UA 导致播不动时关掉即可
+    "seg_direct": True,
     # 分组维度：可以整组隐藏/排序/改名，不必逐个台去勾
     "hidden_groups": [],
     "group_order": [],
@@ -728,11 +731,14 @@ def d64(token):
     return base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode("utf-8")
 
 
-def stream_rel(url, src=""):
-    """子清单地址。带 src 时把「当前用的是哪个源」一并传下去，切片失败才好定位换源。"""
+def stream_rel(url, src="", direct=False):
+    """子清单地址。带 src 时把「当前用的是哪个源」一并传下去，切片失败才好定位换源。
+    direct 透传给下一层，决定媒体清单里的切片是直连源站还是再过本机。"""
     rel = "stream?u=" + e64(url)
     if src:
         rel += "&s=" + e64(src)
+    if direct:
+        rel += "&d=1"
     return rel
 
 
@@ -743,8 +749,12 @@ def seg_rel(url, src=""):
     return rel
 
 
-def rewrite_playlist(text, base, src=""):
-    """把 m3u8 里的子清单、分片、密钥地址换成经过本机代理的地址。"""
+def rewrite_playlist(text, base, src="", direct=False):
+    """把 m3u8 里的子清单、分片、密钥地址换成经过本机代理的地址。
+
+    direct=True 时切片保留源站绝对地址（手机直连，NAS 不转发大流量），
+    子清单仍走本机（要逐层改写），密钥也仍走本机（体积极小，顺带带上 Referer 更稳）。
+    """
     out = []
     after_stream_inf = False
     for line in text.splitlines():
@@ -762,7 +772,12 @@ def rewrite_playlist(text, base, src=""):
             continue
         full = urllib.parse.urljoin(base, s)
         is_sub = after_stream_inf or full.split("?")[0].lower().endswith(".m3u8")
-        out.append(stream_rel(full, src) if is_sub else seg_rel(full, src))
+        if is_sub:
+            out.append(stream_rel(full, src, direct))
+        elif direct:
+            out.append(full)              # 切片直连源站：这一行省掉一半 NAS 流量
+        else:
+            out.append(seg_rel(full, src))
         after_stream_inf = False
     return "\n".join(out) + "\n"
 
@@ -1483,8 +1498,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001
                 src = ""
 
+        direct = (query.get("d") or [""])[0] == "1"
         if path == "/api/stream":
-            return self.send_playlist(url, src)
+            return self.send_playlist(url, src, direct)
 
         # 分片：透传 Range，边读边写，不占内存
         extra = {"Accept-Encoding": "identity"}
@@ -1551,8 +1567,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001
                 pass
 
-    def send_playlist(self, url, src=""):
-        """拉取并重写 m3u8。src 标明这份清单来自哪个源，传给切片以便失败时换源。"""
+    def send_playlist(self, url, src="", direct=False):
+        """拉取并重写 m3u8。src 标明这份清单来自哪个源，传给切片以便失败时换源。
+        direct=True 时切片直连源站（省 NAS 流量），来自 /api/live 链路才会置位。"""
         src = src or url
         try:
             resp = open_stream(url, timeout=8)
@@ -1572,7 +1589,7 @@ class Handler(BaseHTTPRequestHandler):
             # 不是 HLS：多半是直接给了 mp4/flv，交给播放器原生能力
             return self.send_body("这个地址返回的不是 HLS 播放列表，可能已失效",
                                   "text/plain; charset=utf-8", 415)
-        body = rewrite_playlist(text, final, src)
+        body = rewrite_playlist(text, final, src, direct)
         return self.send_body(body, "application/vnd.apple.mpegurl",
                               extra={"Access-Control-Allow-Origin": "*",
                                      "Cache-Control": "no-cache"})
@@ -1642,7 +1659,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_body("所有源暂时不可用：%s" % last,
                                   "text/plain; charset=utf-8", 502)
 
-        body = rewrite_playlist(text, final, used)
+        direct = bool(conf["settings"].get("seg_direct", True))
+        body = rewrite_playlist(text, final, used, direct)
         return self.send_body(body, "application/vnd.apple.mpegurl",
                               extra={"Access-Control-Allow-Origin": "*",
                                      "Cache-Control": "no-cache"})

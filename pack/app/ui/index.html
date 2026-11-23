@@ -412,6 +412,9 @@
       <div class="field"><div class="k">多源自动切换</div>
         <div><button class="switch" id="sw-autorenew" onclick="toggleSw('auto_renew')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">主源失效时自动在备源里找一个能播的；关掉则只代理你手选的那一个源</span></div></div>
+      <div class="field"><div class="k">切片直连（省流量）</div>
+        <div><button class="switch" id="sw-segdirect" onclick="toggleSw('seg_direct')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">NAS 只转发几百 KB 的清单（仍能续期/换源），视频分片由手机直连源站，NAS 流量从 GB 降到 KB；外网观看建议开。个别源播不动（校验 Referer/UA）时再关掉</span></div></div>
       <div class="field"><div class="k">只输出可用频道</div>
         <div><button class="switch" id="sw-only" onclick="toggleSw('only_alive')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">测活后生效，未测过的频道仍会输出</span></div></div>
@@ -1588,7 +1591,7 @@ function fillBase() {
 
 function renderSettings() {
   const s = S.settings || {};
-  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew'};
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
   Object.keys(map).forEach(k => { const el = $(map[k]); if (el) el.classList.toggle('on', !!s[k]); });
   $('s-refresh').value = s.refresh_minutes != null ? s.refresh_minutes : 360;
   $('s-timeout').value = s.timeout != null ? s.timeout : 30;
@@ -1601,7 +1604,7 @@ function renderSettings() {
 
 async function toggleSw(key) {
   S.settings[key] = !S.settings[key];
-  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew'};
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
   $(map[key]).classList.toggle('on', S.settings[key]);
   await api('/api/settings', {[key]: S.settings[key]});
   toast((key === 'hide_blocked' || key === 'only_alive' || key === 'hide_ad')
