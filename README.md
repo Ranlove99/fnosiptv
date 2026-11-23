@@ -5,7 +5,7 @@
 
 **作者**：ranlove99
 
-- 安装包：[`releases/fnosiptv_1.9.4.fpk`](releases/fnosiptv_1.9.4.fpk)（`platform=all`，x86 与 ARM 通用）
+- 安装包：[**GitHub Releases**](https://github.com/Ranlove99/fnosiptv/releases/latest) 下载 `fnosiptv_1.9.4.fpk`（`platform=all`，x86 与 ARM 通用；仓库内 [`releases/`](releases/) 也留了一份）
 - 依赖：只需要飞牛应用中心的 `python312`，无需 Docker、无需 ffmpeg
 - 端口：18080
 - 协议：见 [LICENSE](LICENSE)
