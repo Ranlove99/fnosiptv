@@ -444,11 +444,12 @@
               <button onclick="copyUrl('sub-phone')">复制</button></div>
             <div class="mono sub-url" id="sub-phone">—</div>
             <div class="sub-note" style="margin-top:4px">NAS 只发几百 KB 清单（续期/换源照常），视频不占你家上行。在外用手机看用这条</div>
+            <div class="sub-note" style="margin-top:8px">只订阅一个分组：在地址后加 <code>&amp;g=分组名</code>，或在「分组」页点该分组的「订阅」按钮直接复制</div>
           </div>
         </div></div>
       <div class="field"><div class="k">默认切片策略</div>
         <div><button class="switch" id="sw-segdirect" onclick="toggleSw('seg_direct')"><i></i></button>
-          <span class="muted" style="font-size:12px;margin-left:10px">两条订阅地址都已在链接里写死策略（<code>?d=1</code> 直连、不带则代理），这里只兜底没有 d 参数的老地址：开=直连省流量，关=全部走代理</span></div></div>
+          <span class="muted" style="font-size:12px;margin-left:10px">两条订阅地址都已在链接里写死策略（<code>?d=1</code> 直连、不带则代理）。这里只兜底「没带 d 参数的老地址」，默认关=全部走代理（浏览器才播得出来）：开=直连省流量，但网页端会黑屏</span></div></div>
       <div class="field"><div class="k">优先 H.264</div>
         <div><button class="switch" id="sw-h264" onclick="toggleSw('prefer_h264')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">多码率源自动挑 H.264 那一路，避开手机解不了的 HEVC / 4K。「有声音、没画面」基本都是播放器解不出视频轨，换源救不回来。建议开启</span></div></div>
@@ -746,6 +747,7 @@ function drawGroups() {
       </div>
       <div class="g-ops" onclick="event.stopPropagation()">
         <button class="mini" data-k="${esc(g.key)}" data-h="${g.hidden ? 1 : 0}" onclick="grpToggle(this)">${g.hidden ? '恢复' : '隐藏'}</button>
+        <button class="mini" data-k="${esc(g.key)}" onclick="copyGroupSub(this.dataset.k)" title="复制只含这个分组的订阅地址">订阅</button>
         <button class="mini" data-k="${esc(g.key)}" onclick="grpMenu(this.dataset.k)">⋯</button>
       </div>
     </div>`).join('');
@@ -1013,6 +1015,11 @@ function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(done).catch(fallback);
   } else fallback();
+}
+
+/* 只要一个分组的订阅地址：播放器里分开建库，几百台的列表才看得下去 */
+function copyGroupSub(key) {
+  copyText(absUrl('/iptv.m3u?g=' + encodeURIComponent(key)));
 }
 
 /* ---------------- 分组顶栏操作 ---------------- */
@@ -1641,7 +1648,7 @@ function renderSettings() {
   $('s-timeout').value = s.timeout != null ? s.timeout : 30;
   $('s-epg').value = s.epg_urls || '';
   $('s-base').value = s.public_base || '';
-  $('ab-ver').textContent = S.version || '—';
+  $('ab-ver').textContent = (S.version || '—') + (S.build ? ' · ' + S.build : '');
   $('ab-dir').textContent = S.data_dir || '—';
   $('ab-m3u').textContent = absUrl((S.subscribe || {}).m3u) || '—';
   // 两条订阅共用一套频道表，只有切片策略不同：网页端必须走代理，手机端直连省流量

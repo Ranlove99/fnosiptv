@@ -32,7 +32,21 @@ APP_NAME = "fnosiptv"
 PREFIX = "/app/%s" % APP_NAME
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, "ui")
-APP_VERSION = "1.9.4"
+APP_VERSION = "1.9.5"
+
+
+def _build_id():
+    """源码指纹。部署的是哪份代码，/api/state 里一眼能看出来——
+    排查「明明修好了又坏」时，先确认跑的是不是这一版（本地改文件会改掉它）。"""
+    try:
+        import hashlib
+        with open(os.path.join(HERE, "fnosiptv.py"), "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()[:8]
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+BUILD_ID = _build_id()
 
 DATA_DIR = os.environ.get("TRIM_PKGVAR") or os.path.join(HERE, "..", "data")
 DATA_DIR = os.path.abspath(DATA_DIR)
@@ -105,8 +119,10 @@ DEFAULT_SETTINGS = {
     # /api/live 代理时是否多源自动切换；关掉则只代理用户选中的主源
     "auto_renew": True,
     # 切片直连：清单仍经 NAS 代理（负责续期/换源），视频分片让播放器直接连源站，
-    # NAS 流量从 GB 级降到 KB 级。源站校验 Referer/UA 导致播不动时关掉即可
-    "seg_direct": True,
+    # NAS 流量从 GB 级降到 KB 级。只作为「订阅地址没带 d 参数」时的兜底，
+    # 默认关：直连的切片不带 CORS 头，浏览器一律拉不到、只能听到声音看不到画面。
+    # 要省流量就用显式地址 /iptv.m3u?d=1（手机/盒子），别指望全局开关猜对客户端。
+    "seg_direct": False,
     # 多码率源里优先挑 H.264 变体：手机解不出 HEVC/4K 的视频轨时会出现
     # 「有声音、没画面」，而切片本身全是 200，换源也救不回来
     "prefer_h264": True,
@@ -236,8 +252,10 @@ def order_channels(chs, st):
     return out
 
 
-def output_channels(cache, conf):
-    """最终输出到 M3U/TXT/预览的频道：屏蔽 → 隐藏分组 → 只要可用 → 剔除广告 → 排序 → 别名。"""
+def output_channels(cache, conf, group=""):
+    """最终输出到 M3U/TXT/预览的频道：屏蔽 → 隐藏分组 → 只要可用 → 剔除广告 → 分组 → 排序 → 别名。
+
+    group 非空时只留该分组（原组名或改名后的显示名都认），用于 ?g= 分组订阅。"""
     st = conf["settings"]
     chs = cache.get("channels", [])
     blocked = set(st.get("blocked") or [])
@@ -252,6 +270,9 @@ def output_channels(cache, conf):
     if st.get("hide_ad"):
         chs = [c for c in chs if not (c.get("verdict") == "ad" or c.get("verdict2") == "ad")]
     chs = core.apply_keep(chs, st.get("keep"))
+    if group:
+        ga0 = st.get("group_alias") or {}
+        chs = [c for c in chs if group_of(c) == group or ga0.get(group_of(c)) == group]
     chs = order_channels(chs, st)
 
     # 别名只作用于输出，缓存里始终保留原名：屏蔽、排序、改名才能对得上
@@ -783,17 +804,46 @@ def _is_h264(attrs):
     return "avc1" in c or "avc3" in c
 
 
-def pick_variant(variants, max_height=0):
-    """挑一路手机一定能解的：优先 H.264 → 限分辨率 → 同档取带宽最高。
+def _audio_ok(attrs):
+    """音频轨浏览器能不能解。CODECS 没写音频时无从判断，按「能解」处理。
 
-    没有 H.264 时退回全部变体（至少不限死于一种编码），此时按带宽取最高，
-    因为多数播放器本来就会挑最高那路。"""
-    cands = [v for v in variants if _is_h264(v[0])] or variants
+    Chrome/Firefox 的 MSE 只认 AAC(mp4a)：mp2 / ac3 / ec-3 一律解不了，
+    表现和 HEVC 视频正好相反——有画面、没声音。选变体时一并避开。"""
+    c = (attrs.get("CODECS") or "").lower()
+    if not c:
+        return True
+    return not any(x in c for x in ("mp2", "ac-3", "ac3", "ec-3", "eac3"))
+
+
+def _variant_tier(attrs):
+    """越小越优先：视频能解且音频能解 → 只有视频能解 → 只有音频能解 → 都不行。"""
+    video, audio = _is_h264(attrs), _audio_ok(attrs)
+    if video and audio:
+        return 0
+    if video:
+        return 1
+    if audio:
+        return 2
+    return 3
+
+
+def pick_variant(variants, max_height=0):
+    """挑一路手机/浏览器一定能解的：H.264 + AAC → 限分辨率 → 同档取带宽最高。
+
+    没有 H.264 时退回全部变体，但仍优先音频能解、分辨率更低的那路 ——
+    全 HEVC 的源里，720p 通常比 4K 更可能被硬解。"""
+    h264 = [v for v in variants if _is_h264(v[0])]
+    cands = h264 or variants
     if max_height:
         fit = [v for v in cands if _height(v[0]) in (0,) or _height(v[0]) <= max_height]
         if fit:
             cands = fit
-    return max(cands, key=lambda v: int(v[0].get("BANDWIDTH") or 0))
+    if h264:
+        return min(cands, key=lambda v: (_variant_tier(v[0]),
+                                         -int(v[0].get("BANDWIDTH") or 0)))
+    return min(cands, key=lambda v: (_variant_tier(v[0]),
+                                     _height(v[0]) or 9999,
+                                     -int(v[0].get("BANDWIDTH") or 0)))
 
 
 
@@ -835,6 +885,24 @@ def rewrite_playlist(text, base, src="", direct=False):
             out.append(seg_rel(full, src))
         after_stream_inf = False
     return "\n".join(out) + "\n"
+
+
+_PLAYER_UA = ("exoplayer", "stagefright", "lavf", "ffmpeg", "vlc", "kodi", "okhttp",
+              "libmpv", "ijkplayer", "gstreamer", "applecoremedia", "mpv")
+
+
+def is_browser_ua(ua):
+    """是不是浏览器发的请求。
+
+    只用来做「保命」判断：浏览器直连源站切片必被 CORS 拦，显式写了 d=1 也救不了。
+    正常路由靠订阅地址里的 d 参数，不靠猜 UA —— UA 可以伪造，TV 端也可能带 Mozilla。
+    """
+    u = (ua or "").lower()
+    if not u or "mozilla" not in u:
+        return False
+    if any(k in u for k in _PLAYER_UA):
+        return False
+    return any(k in u for k in ("chrome/", "firefox/", "safari/", "edg/", "opr/"))
 
 
 def open_stream(url, timeout=10, extra=None):
@@ -1086,6 +1154,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.proxy_stream(path, query)
         if path == "/api/live":
             return self.api_live(query)
+        if path == "/api/selftest":
+            return self.api_selftest(query)
         if path == "/api/probe/status":
             with LOCK:
                 return self.send_json({"probe": dict(STATE["probe"])})
@@ -1189,6 +1259,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json({
             "app": "fnosiptv",
             "version": APP_VERSION,
+            "build": BUILD_ID,
             "data_dir": DATA_DIR,
             "settings": conf["settings"],
             "sources": conf["sources"],
@@ -1742,16 +1813,116 @@ class Handler(BaseHTTPRequestHandler):
                     text, final = sub_text, sub_final
 
         # 切片策略由订阅地址带下来：d=0 走代理（网页端），d=1 直连（手机端省流量）。
-        # 老订阅地址没有 d，回退到全局开关，行为和升级前一致。
+        # 老订阅地址没带 d 时默认走代理：多耗点带宽，但保证任何客户端都播得出来。
+        # 反过来（默认直连）会让浏览器整片黑屏——1.9.1~1.9.4 就是这么翻车的。
         dparam = (query.get("d") or [""])[0]
         if dparam in ("0", "1"):
             direct = dparam == "1"
         else:
-            direct = bool(conf["settings"].get("seg_direct", True))
+            direct = bool(conf["settings"].get("seg_direct", False))
+        if direct and is_browser_ua(self.headers.get("User-Agent")):
+            # 浏览器直连切片一定被 CORS 拦死，d=1 写在地址里也救不了，这里强制回代理
+            direct = False
+            print("[live] 浏览器请求带 d=1，已强制走代理：%s" % (used or "?"), flush=True)
         body = rewrite_playlist(text, final, used, direct)
         return self.send_body(body, "application/vnd.apple.mpegurl",
                               extra={"Access-Control-Allow-Origin": "*",
                                      "Cache-Control": "no-cache"})
+
+    def api_selftest(self, query):
+        """一键体检：频道 → 源 → 清单 → 码率变体 → 首个切片。
+
+        升级后想确认「真能播」比人肉开播放器快；出问题也能一眼看出断在哪一环。
+        切片只拉 4KB（Range），不整段下载。
+        """
+        name = (query.get("name") or [""])[0]
+        conf = load_config()
+        chans = output_channels(load_cache(), conf)
+        if not chans:
+            return self.send_json({"error": "频道表为空，先抓取一次"}, 409)
+        ch = next((c for c in chans if c.get("name") == name), None)
+        if ch is None and not name:
+            ch = chans[0]
+        if ch is None:
+            return self.send_json({"error": "没有这个频道：%s" % name}, 404)
+
+        rep = {"channel": ch.get("name"), "group": ch.get("group"),
+               "build": BUILD_ID, "steps": []}
+
+        def step(label, ok, **kw):
+            rep["steps"].append(dict(name=label, ok=bool(ok), **kw))
+
+        cands = channel_sources(ch, prefer=ch.get("url"))
+        step("candidates", True, count=len(cands), urls=[u[:90] for u in cands])
+
+        text = final = used = None
+        last = ""
+        for u in cands[:8]:
+            try:
+                resp = open_stream(u, timeout=6)
+                raw = resp.read(3 * 1024 * 1024)
+                final = resp.geturl() or u
+                resp.close()
+                t = core.decode(raw)
+                if t.lstrip().startswith("#EXTM3U"):
+                    text, used = t, u
+                    break
+                last = "不是 HLS 清单"
+            except urllib.error.HTTPError as exc:
+                last = "HTTP %d" % exc.code
+            except Exception as exc:  # noqa: BLE001
+                last = str(exc)[:100]
+        step("manifest", bool(text), source=(used or "")[:90],
+             final=(final or "")[:90], error="" if text else last)
+        if not text:
+            rep["ok"] = False
+            return self.send_json(rep)
+
+        variants = parse_variants(text, final)
+        if len(variants) > 1 and "#EXT-X-MEDIA" not in text:
+            attrs, vurl = pick_variant(variants, int(conf["settings"].get("max_height") or 0))
+            step("variant", True, count=len(variants),
+                 pick=attrs.get("RESOLUTION", "?"), codecs=attrs.get("CODECS", ""))
+            try:
+                resp = open_stream(vurl, timeout=6)
+                raw = resp.read(3 * 1024 * 1024)
+                final = resp.geturl() or vurl
+                resp.close()
+                text = core.decode(raw)
+            except Exception as exc:  # noqa: BLE001
+                step("variant_manifest", False, error=str(exc)[:100])
+        else:
+            step("variant", True, count=len(variants),
+                 pick="单一码率或带音轨组，不做拆分")
+
+        seg = ""
+        for line in text.splitlines():
+            s = line.strip()
+            if s and not s.startswith("#"):
+                seg = urllib.parse.urljoin(final, s)
+                break
+        if not seg:
+            step("segment", False, error="清单里没有切片")
+            rep["ok"] = False
+            return self.send_json(rep)
+
+        try:
+            resp = open_stream(seg, timeout=10, extra={"Range": "bytes=0-4095"})
+            chunk = resp.read(4096)
+            code = resp.getcode()
+            resp.close()
+            ok = code in (200, 206) and bool(chunk)
+            step("segment", ok, url=seg[:100], status=code, bytes=len(chunk),
+                 head=chunk[:1].hex() if chunk else "")
+        except urllib.error.HTTPError as exc:
+            ok = False
+            step("segment", False, url=seg[:100], status=exc.code,
+                 error="HTTP %d" % exc.code)
+        except Exception as exc:  # noqa: BLE001
+            ok = False
+            step("segment", False, url=seg[:100], error=str(exc)[:100])
+        rep["ok"] = bool(ok)
+        return self.send_json(rep)
 
     def api_play(self, query):
         """播放用的候选源顺序：可用 → 未测 → 失效；同档内主源优先、然后看信任分。
@@ -2023,15 +2194,25 @@ class Handler(BaseHTTPRequestHandler):
     def serve_m3u(self, query=None):
         """订阅输出。切片策略按地址自动分配，两条订阅用同一个频道表：
 
-          /iptv.m3u      → 切片走本机代理（给飞牛影视网页端：浏览器有 CORS，直连拉不到）
-          /iptv.m3u?d=1  → 切片直连源站（给手机/盒子：NAS 只发几百 KB 清单，不转发大流量）
+          /iptv.m3u              → 切片走本机代理（给飞牛影视网页端：浏览器有 CORS，直连拉不到）
+          /iptv.m3u?d=1          → 切片直连源站（给手机/盒子：NAS 只发几百 KB 清单，不转发大流量）
+          /iptv.m3u?g=央视       → 只输出该分组（可再叠加 d=1）
         """
         query = query or {}
         # 默认走代理（网页端最稳），只有显式 d=1 才切片直连
         direct = (query.get("d") or [""])[0] == "1"
+        gparam = ((query.get("g") or [""])[0] or "").strip()
         cache = load_cache()
         conf = load_config()
-        channels = output_channels(cache, conf)
+        # 分组订阅：播放器里按「央视 / 卫视 / 地方」分开建库，比一个几百台的列表好用
+        channels = output_channels(cache, conf, group=gparam)
+        if gparam and not channels:
+            # 精确匹配没命中时退一步做包含匹配，省得记全分组名
+            channels = [c for c in output_channels(cache, conf)
+                        if gparam in (c.get("group") or "")]
+            if not channels:
+                return self.send_body("没有匹配的分组：%s" % gparam,
+                                      "text/plain; charset=utf-8", 404)
         base = self.base_url()
         epg_conf = (load_config()["settings"].get("epg_urls") or "").strip()
         epg = base + "/epg.xml" if epg_conf else ""
