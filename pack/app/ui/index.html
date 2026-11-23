@@ -449,6 +449,9 @@
       <div class="field"><div class="k">默认切片策略</div>
         <div><button class="switch" id="sw-segdirect" onclick="toggleSw('seg_direct')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">两条订阅地址都已在链接里写死策略（<code>?d=1</code> 直连、不带则代理），这里只兜底没有 d 参数的老地址：开=直连省流量，关=全部走代理</span></div></div>
+      <div class="field"><div class="k">优先 H.264</div>
+        <div><button class="switch" id="sw-h264" onclick="toggleSw('prefer_h264')"><i></i></button>
+          <span class="muted" style="font-size:12px;margin-left:10px">多码率源自动挑 H.264 那一路，避开手机解不了的 HEVC / 4K。「有声音、没画面」基本都是播放器解不出视频轨，换源救不回来。建议开启</span></div></div>
       <div class="field"><div class="k">只输出可用频道</div>
         <div><button class="switch" id="sw-only" onclick="toggleSw('only_alive')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">测活后生效，未测过的频道仍会输出</span></div></div>
@@ -1632,7 +1635,7 @@ function fillBase() {
 
 function renderSettings() {
   const s = S.settings || {};
-  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', logo_cdn:'sw-logocdn', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', logo_cdn:'sw-logocdn', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect', prefer_h264:'sw-h264'};
   Object.keys(map).forEach(k => { const el = $(map[k]); if (el) el.classList.toggle('on', !!s[k]); });
   $('s-refresh').value = s.refresh_minutes != null ? s.refresh_minutes : 360;
   $('s-timeout').value = s.timeout != null ? s.timeout : 30;
@@ -1649,7 +1652,7 @@ function renderSettings() {
 
 async function toggleSw(key) {
   S.settings[key] = !S.settings[key];
-  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', logo_cdn:'sw-logocdn', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect'};
+  const map = {unify_name:'sw-unify', dedupe:'sw-dedupe', cn_only:'sw-cn', local_logo:'sw-logo', logo_cdn:'sw-logocdn', only_alive:'sw-only', probe_on_refresh:'sw-probe', hide_dead:'sw-hide', hide_ad:'sw-hidead', hide_blocked:'sw-hideblk', m3u_proxy:'sw-m3uproxy', auto_renew:'sw-autorenew', seg_direct:'sw-segdirect', prefer_h264:'sw-h264'};
   $(map[key]).classList.toggle('on', S.settings[key]);
   await api('/api/settings', {[key]: S.settings[key]});
   toast((key === 'hide_blocked' || key === 'only_alive' || key === 'hide_ad')

@@ -32,7 +32,7 @@ APP_NAME = "fnosiptv"
 PREFIX = "/app/%s" % APP_NAME
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, "ui")
-APP_VERSION = "1.9.3"
+APP_VERSION = "1.9.4"
 
 DATA_DIR = os.environ.get("TRIM_PKGVAR") or os.path.join(HERE, "..", "data")
 DATA_DIR = os.path.abspath(DATA_DIR)
@@ -107,6 +107,11 @@ DEFAULT_SETTINGS = {
     # 切片直连：清单仍经 NAS 代理（负责续期/换源），视频分片让播放器直接连源站，
     # NAS 流量从 GB 级降到 KB 级。源站校验 Referer/UA 导致播不动时关掉即可
     "seg_direct": True,
+    # 多码率源里优先挑 H.264 变体：手机解不出 HEVC/4K 的视频轨时会出现
+    # 「有声音、没画面」，而切片本身全是 200，换源也救不回来
+    "prefer_h264": True,
+    # 0 = 不限制；填 720 则只挑 720p 及以下（弱网/老盒子更稳）
+    "max_height": 0,
     # 分组维度：可以整组隐藏/排序/改名，不必逐个台去勾
     "hidden_groups": [],
     "group_order": [],
@@ -742,6 +747,54 @@ def stream_rel(url, src="", direct=False):
     if direct:
         rel += "&d=1"
     return rel
+
+
+# ---------------------------------------------------------------- 码率变体
+# 一个 master 里常挂好几路：4K HEVC、1080p H.264、720p……播放器按带宽自己挑，
+# 挑到 HEVC 或 4K 时手机解不出视频轨，就成了「有声音、没画面」。这里替它挑一路。
+
+_ATTR_RE = re.compile(r'([A-Z0-9-]+)=("[^"]*"|[^,]*)')
+
+
+def _attrs(line):
+    return {k: v.strip('"') for k, v in _ATTR_RE.findall(line)}
+
+
+def parse_variants(text, base):
+    """解析 master 里的码率变体 → [(属性 dict, 绝对地址)]，保持文件里的顺序。"""
+    out, cur = [], None
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("#EXT-X-STREAM-INF"):
+            cur = _attrs(s)
+        elif s and not s.startswith("#") and cur is not None:
+            out.append((cur, urllib.parse.urljoin(base, s)))
+            cur = None
+    return out
+
+
+def _height(attrs):
+    m = re.search(r"(\d+)\s*x\s*(\d+)", attrs.get("RESOLUTION", "") or "")
+    return int(m.group(2)) if m else 0
+
+
+def _is_h264(attrs):
+    c = (attrs.get("CODECS") or "").lower()
+    return "avc1" in c or "avc3" in c
+
+
+def pick_variant(variants, max_height=0):
+    """挑一路手机一定能解的：优先 H.264 → 限分辨率 → 同档取带宽最高。
+
+    没有 H.264 时退回全部变体（至少不限死于一种编码），此时按带宽取最高，
+    因为多数播放器本来就会挑最高那路。"""
+    cands = [v for v in variants if _is_h264(v[0])] or variants
+    if max_height:
+        fit = [v for v in cands if _height(v[0]) in (0,) or _height(v[0]) <= max_height]
+        if fit:
+            cands = fit
+    return max(cands, key=lambda v: int(v[0].get("BANDWIDTH") or 0))
+
 
 
 def seg_rel(url, src=""):
@@ -1667,6 +1720,26 @@ class Handler(BaseHTTPRequestHandler):
         if text is None:
             return self.send_body("所有源暂时不可用：%s" % last,
                                   "text/plain; charset=utf-8", 502)
+
+        # master 里有多路码率时替播放器挑一路：优先 H.264、限制分辨率。
+        # 手机解不出 HEVC 4K 的视频轨，表现就是「有声音、没画面」，换源也救不回来，
+        # 因为源是好的、切片也是 200，只是编码不兼容。
+        if conf["settings"].get("prefer_h264", True):
+            variants = parse_variants(text, final)
+            if len(variants) > 1 and "#EXT-X-MEDIA" not in text:
+                # 有独立音轨组（EXT-X-MEDIA）时不能拆 master，否则会丢音轨，原样放行
+                best_attrs, best_url = pick_variant(
+                    variants, int(conf["settings"].get("max_height") or 0))
+                print("[live] 变体 %d 路 → 选 %s %s"
+                      % (len(variants), best_attrs.get("RESOLUTION", "?"),
+                         best_attrs.get("CODECS", "?")), flush=True)
+                try:
+                    sub_text, sub_final = grab(best_url)
+                except Exception:  # noqa: BLE001
+                    sub_text = None
+                if sub_text:
+                    # used 保持原源不变：切片失败时冷却的是整条源，换源才能生效
+                    text, final = sub_text, sub_final
 
         # 切片策略由订阅地址带下来：d=0 走代理（网页端），d=1 直连（手机端省流量）。
         # 老订阅地址没有 d，回退到全局开关，行为和升级前一致。
