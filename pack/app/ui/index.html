@@ -142,6 +142,13 @@
   .field{display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:center;
     background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
   .field .k{font-size:13px;color:var(--muted)}
+  /* 订阅地址：链接很长，必须让它自己换行，否则整页被撑出横向滚动 */
+  .field > div{min-width:0}
+  .sub-item{min-width:0}
+  .sub-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .sub-hd button{flex:none;padding:4px 10px;font-size:12px;margin-left:auto}
+  .sub-url{font-size:11.5px;color:#9fb0c6;word-break:break-all;line-height:1.55;margin-top:6px}
+  .sub-note{font-size:12px;color:var(--muted);line-height:1.55}
   .switch{width:44px;height:24px;border-radius:999px;background:#2a3444;position:relative;cursor:pointer;border:none;padding:0}
   .switch i{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#8b97ab;transition:.18s}
   .switch.on{background:rgba(62,166,255,.35)}
@@ -250,13 +257,20 @@
 
     <div class="cards">
       <div class="card">
-        <div class="label"><span>M3U 订阅 · 给飞牛影视</span><span class="tag ok">推荐</span></div>
+        <div class="label"><span>M3U 订阅 · 自动分配</span><span class="tag ok">推荐</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">① 网页端（飞牛影视网页版）· 切片走本机代理</div>
         <div class="url" id="u-m3u"></div>
-        <div class="row" style="margin-top:10px">
+        <div class="row" style="margin-top:8px">
           <button onclick="copyUrl('u-m3u')">复制地址</button>
           <a class="mono" id="l-m3u" href="#" target="_blank">打开预览</a>
         </div>
-        <div class="hint">标准 M3U，频道名已统一（CCTV1 / CCTV-1 / CCTV1综合 → CCTV-1）</div>
+        <div style="font-size:12px;color:var(--muted);margin:14px 0 6px">② 手机 / 盒子 · 切片直连源站（不占 NAS 上行）</div>
+        <div class="url" id="u-m3u-d"></div>
+        <div class="row" style="margin-top:8px">
+          <button onclick="copyUrl('u-m3u-d')">复制地址</button>
+          <a class="mono" id="l-m3u-d" href="#" target="_blank">打开预览</a>
+        </div>
+        <div class="hint">两条地址频道表完全一致，只有分片走向不同；频道名已统一（CCTV1 / CCTV-1 / CCTV1综合 → CCTV-1）</div>
       </div>
       <div class="card">
         <div class="label"><span>TXT 订阅 · 给老播放器</span><span class="tag">备用</span></div>
@@ -415,9 +429,26 @@
       <div class="field"><div class="k">多源自动切换</div>
         <div><button class="switch" id="sw-autorenew" onclick="toggleSw('auto_renew')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">主源失效时自动在备源里找一个能播的；关掉则只代理你手选的那一个源</span></div></div>
-      <div class="field"><div class="k">切片直连（省流量）</div>
+      <div class="field"><div class="k">订阅地址（自动分配）</div>
+        <div class="subs">
+          <div class="sub-item">
+            <div class="sub-hd"><span class="tag" style="background:#1d3f6b;color:#8fc0ff">网页端</span>
+              <span class="sub-note">切片走代理</span>
+              <button onclick="copyUrl('sub-web')">复制</button></div>
+            <div class="mono sub-url" id="sub-web">—</div>
+            <div class="sub-note" style="margin-top:4px">浏览器有跨域限制，分片直连会被拦。飞牛影视网页版用这条</div>
+          </div>
+          <div class="sub-item" style="margin-top:14px">
+            <div class="sub-hd"><span class="tag" style="background:#1c4a34;color:#7ee2a8">手机/盒子</span>
+              <span class="sub-note">切片直连</span>
+              <button onclick="copyUrl('sub-phone')">复制</button></div>
+            <div class="mono sub-url" id="sub-phone">—</div>
+            <div class="sub-note" style="margin-top:4px">NAS 只发几百 KB 清单（续期/换源照常），视频不占你家上行。在外用手机看用这条</div>
+          </div>
+        </div></div>
+      <div class="field"><div class="k">默认切片策略</div>
         <div><button class="switch" id="sw-segdirect" onclick="toggleSw('seg_direct')"><i></i></button>
-          <span class="muted" style="font-size:12px;margin-left:10px">NAS 只转发几百 KB 的清单（仍能续期/换源），视频分片由手机直连源站，NAS 流量从 GB 降到 KB；外网观看建议开。个别源播不动（校验 Referer/UA）时再关掉</span></div></div>
+          <span class="muted" style="font-size:12px;margin-left:10px">两条订阅地址都已在链接里写死策略（<code>?d=1</code> 直连、不带则代理），这里只兜底没有 d 参数的老地址：开=直连省流量，关=全部走代理</span></div></div>
       <div class="field"><div class="k">只输出可用频道</div>
         <div><button class="switch" id="sw-only" onclick="toggleSw('only_alive')"><i></i></button>
           <span class="muted" style="font-size:12px;margin-left:10px">测活后生效，未测过的频道仍会输出</span></div></div>
@@ -569,6 +600,13 @@ function render() {
     // 预览走 HTML 页：浏览器无法播放 .m3u，直接打开只会黑屏
     if (url) { a.href = absUrl(sub.preview || url); a.style.display = ''; } else { a.style.display = 'none'; }
   });
+  // 手机端那条：同一个订阅地址带 d=1，切片直连源站
+  if ($('u-m3u-d')) {
+    const m3u = absUrl(sub.m3u) || (location.origin + '/iptv.m3u');
+    $('u-m3u-d').textContent = m3u + (m3u.includes('?') ? '&' : '?') + 'd=1';
+    const ad = $('l-m3u-d');
+    if (ad) { ad.href = absUrl(sub.preview || m3u); ad.style.display = ''; }
+  }
   const hasEpg = (S.settings.epg_urls || '').trim();
   $('tag-epg').textContent = hasEpg ? '已配置' : '未配置';
   $('tag-epg').className = 'tag ' + (hasEpg ? 'ok' : '');
@@ -1603,6 +1641,10 @@ function renderSettings() {
   $('ab-ver').textContent = S.version || '—';
   $('ab-dir').textContent = S.data_dir || '—';
   $('ab-m3u').textContent = absUrl((S.subscribe || {}).m3u) || '—';
+  // 两条订阅共用一套频道表，只有切片策略不同：网页端必须走代理，手机端直连省流量
+  const m3u = absUrl((S.subscribe || {}).m3u) || (location.origin + '/iptv.m3u');
+  if ($('sub-web')) $('sub-web').textContent = m3u;
+  if ($('sub-phone')) $('sub-phone').textContent = m3u + (m3u.includes('?') ? '&' : '?') + 'd=1';
 }
 
 async function toggleSw(key) {

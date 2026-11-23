@@ -32,7 +32,7 @@ APP_NAME = "fnosiptv"
 PREFIX = "/app/%s" % APP_NAME
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, "ui")
-APP_VERSION = "1.9.2"
+APP_VERSION = "1.9.3"
 
 DATA_DIR = os.environ.get("TRIM_PKGVAR") or os.path.join(HERE, "..", "data")
 DATA_DIR = os.path.abspath(DATA_DIR)
@@ -1002,8 +1002,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"status": "ok"})
         if path == "/api/state":
             return self.api_state()
-        if path == "/iptv.m3u":
-            return self.serve_m3u()
+        if path in ("/iptv.m3u", "/d1/iptv.m3u", "/d0/iptv.m3u"):
+            # 路径写法等价于 ?d=1 / ?d=0：个别播放器会校验「地址必须以 .m3u 结尾」，
+            # 带 query 就被判不合规，那就用 /d1/iptv.m3u 这种纯路径形式。
+            q = dict(query)
+            if path == "/d1/iptv.m3u":
+                q["d"] = ["1"]
+            elif path == "/d0/iptv.m3u":
+                q["d"] = ["0"]
+            return self.serve_m3u(q)
         if path == "/preview":
             return self.serve_preview()
         if path == "/iptv.txt":
@@ -1661,7 +1668,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_body("所有源暂时不可用：%s" % last,
                                   "text/plain; charset=utf-8", 502)
 
-        direct = bool(conf["settings"].get("seg_direct", True))
+        # 切片策略由订阅地址带下来：d=0 走代理（网页端），d=1 直连（手机端省流量）。
+        # 老订阅地址没有 d，回退到全局开关，行为和升级前一致。
+        dparam = (query.get("d") or [""])[0]
+        if dparam in ("0", "1"):
+            direct = dparam == "1"
+        else:
+            direct = bool(conf["settings"].get("seg_direct", True))
         body = rewrite_playlist(text, final, used, direct)
         return self.send_body(body, "application/vnd.apple.mpegurl",
                               extra={"Access-Control-Allow-Origin": "*",
@@ -1934,7 +1947,15 @@ class Handler(BaseHTTPRequestHandler):
                 pass
         return self.send_json({"ok": True, "settings": conf["settings"]})
 
-    def serve_m3u(self):
+    def serve_m3u(self, query=None):
+        """订阅输出。切片策略按地址自动分配，两条订阅用同一个频道表：
+
+          /iptv.m3u      → 切片走本机代理（给飞牛影视网页端：浏览器有 CORS，直连拉不到）
+          /iptv.m3u?d=1  → 切片直连源站（给手机/盒子：NAS 只发几百 KB 清单，不转发大流量）
+        """
+        query = query or {}
+        # 默认走代理（网页端最稳），只有显式 d=1 才切片直连
+        direct = (query.get("d") or [""])[0] == "1"
         cache = load_cache()
         conf = load_config()
         channels = output_channels(cache, conf)
@@ -1949,7 +1970,8 @@ class Handler(BaseHTTPRequestHandler):
                 u = c.get("url") or ""
                 if u.lower().split("?")[0].endswith(".m3u8"):
                     d = dict(c)
-                    d["url"] = "%s/api/live?u=%s" % (base, e64(u))
+                    # d 显式写进地址：播放器每次取清单都带着，策略不会串到另一条订阅
+                    d["url"] = "%s/api/live?u=%s&d=%d" % (base, e64(u), 1 if direct else 0)
                     proxied.append(d)
                 else:
                     proxied.append(c)
